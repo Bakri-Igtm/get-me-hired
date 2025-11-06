@@ -6,6 +6,9 @@ import pool from "./db.js";
 
 import requesterRoutes from "./routes/requesters.js";
 import resumeRoutes from "./routes/resumes.js";
+import authRoutes from "./routes/authRoutes.js";
+import reviewRoutes from "./routes/reviews.js";
+import reviewRequestRoutes from "./routes/reviewRequests.js";
 
 dotenv.config();
 
@@ -32,6 +35,9 @@ app.post("/api/test", (req, res) => {
 // feature routes
 app.use("/api/requesters", requesterRoutes);
 app.use("/api/resumes", resumeRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/reviews", reviewRoutes);
+app.use("/api/review-requests", reviewRequestRoutes);
 
 app.listen(process.env.PORT, () => {
   console.log(`API running on port ${process.env.PORT}`);
