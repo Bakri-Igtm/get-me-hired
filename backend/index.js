@@ -1,7 +1,11 @@
+// index.js
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import mysql from "mysql2/promise";
+import pool from "./db.js";
+
+import requesterRoutes from "./routes/requesters.js";
+import resumeRoutes from "./routes/resumes.js";
 
 dotenv.config();
 
@@ -9,13 +13,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const pool = mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-});
-
+// health
 app.get("/api/health", async (req, res) => {
   try {
     const [rows] = await pool.query("SELECT 1 AS ok");
@@ -25,6 +23,15 @@ app.get("/api/health", async (req, res) => {
     res.status(500).json({ status: "error" });
   }
 });
+
+app.post("/api/test", (req, res) => {
+  res.json({ message: "POST /api/test reached the backend 🎯" });
+});
+
+
+// feature routes
+app.use("/api/requesters", requesterRoutes);
+app.use("/api/resumes", resumeRoutes);
 
 app.listen(process.env.PORT, () => {
   console.log(`API running on port ${process.env.PORT}`);
