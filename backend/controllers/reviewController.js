@@ -1,9 +1,8 @@
 import pool from "../db.js";
 
-// POST /api/reviews
 export const createOrUpdateReview = async (req, res) => {
   const { resumeVersionsId, rating, comment } = req.body;
-  const userId = req.user.userId; // from JWT
+  const { userId, userType } = req.user; // from JWT
 
   if (!resumeVersionsId || rating == null) {
     return res
@@ -19,17 +18,57 @@ export const createOrUpdateReview = async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    // ensure resume version exists (optional but helpful)
+    // 1) Get resume version + owner
     const [rvRows] = await conn.query(
-      `SELECT resume_versions_id FROM resume_versions WHERE resume_versions_id = ?`,
+      `
+      SELECT 
+        rv.resume_versions_id,
+        r.resume_id,
+        r.user_id AS owner_id
+      FROM resume_versions rv
+      JOIN resume r ON rv.resume_id = r.resume_id
+      WHERE rv.resume_versions_id = ?
+      `,
       [resumeVersionsId]
     );
+
     if (rvRows.length === 0) {
       await conn.rollback();
       return res.status(404).json({ message: "Resume version not found" });
     }
 
-    // check if this user already has a review for this version
+    const { owner_id } = rvRows[0];
+
+    // 2) Owner can always review their own resume
+    if (userId !== owner_id) {
+      // Non-owner: must be either public or directly requested
+      const [reqRows] = await conn.query(
+        `
+        SELECT request_id, visibility, reviewer_id, status
+        FROM review_request
+        WHERE resume_versions_id = ?
+          AND (
+            visibility = 'public'
+            OR (
+              visibility = 'direct'
+              AND reviewer_id = ?
+              AND status IN ('pending','accepted')
+            )
+          )
+        `,
+        [resumeVersionsId, userId]
+      );
+
+      if (reqRows.length === 0) {
+        await conn.rollback();
+        return res.status(403).json({
+          message:
+            "You don't have permission to review this resume version (not public and no direct request for you).",
+        });
+      }
+    }
+
+    // 3) Upsert review (one per user per version)
     const [existingRows] = await conn.query(
       `SELECT review_id FROM review
        WHERE resume_versions_id = ? AND user_id = ?`,
@@ -55,7 +94,7 @@ export const createOrUpdateReview = async (req, res) => {
       reviewId = result.insertId;
     }
 
-    // if there's a comment, add it as a separate row
+    // 4) Optional comment
     if (comment && comment.trim() !== "") {
       await conn.query(
         `INSERT INTO review_comment (review_id, user_id, comment_text)
@@ -78,6 +117,7 @@ export const createOrUpdateReview = async (req, res) => {
     conn.release();
   }
 };
+
 
 // GET /api/reviews/version/:resumeVersionsId
 export const getReviewsForVersion = async (req, res) => {

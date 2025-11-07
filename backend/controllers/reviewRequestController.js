@@ -1,61 +1,90 @@
 import pool from "../db.js";
 
-// POST /api/review-requests
 export const createReviewRequest = async (req, res) => {
-  const { resumeVersionsId, reviewerId, requestNote } = req.body;
-  const requesterId = req.user.userId; // owner sending the request
+  const { resumeVersionsId, reviewerId, requestNote, visibility, isPublic } =
+    req.body;
+  const requesterId = req.user.userId;
 
-  if (!resumeVersionsId || !reviewerId) {
+  if (!resumeVersionsId) {
     return res
       .status(400)
-      .json({ message: "resumeVersionsId and reviewerId are required" });
+      .json({ message: "resumeVersionsId is required" });
   }
+
+  // 1) Determine visibility
+  let finalVisibility = "direct";
+  if (visibility === "public" || isPublic === true) {
+    finalVisibility = "public";
+  }
+
+  // 2) For direct requests, reviewerId is required
+  if (finalVisibility === "direct" && !reviewerId) {
+    return res
+      .status(400)
+      .json({ message: "reviewerId is required for direct requests" });
+  }
+
+  // For public, reviewerId can be null
+  const finalReviewerId = finalVisibility === "public" ? null : reviewerId;
 
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    // Optional: verify that requester actually owns this resume version
-    // (joining resume_versions -> resume -> users)
-    // For now, we'll trust the ID and just ensure the version exists.
+    // Ensure resume version exists
     const [rvRows] = await conn.query(
       `SELECT resume_versions_id FROM resume_versions WHERE resume_versions_id = ?`,
       [resumeVersionsId]
     );
     if (rvRows.length === 0) {
       await conn.rollback();
-      return res.status(404).json({ message: "Resume version not found" });
+      return res
+        .status(404)
+        .json({ message: "Resume version not found" });
     }
 
-    // create request
+    // Insert review request
     const [result] = await conn.query(
       `INSERT INTO review_request 
-        (resume_versions_id, requester_id, reviewer_id, request_note)
-       VALUES (?, ?, ?, ?)`,
-      [resumeVersionsId, requesterId, reviewerId, requestNote || null]
+        (resume_versions_id, requester_id, reviewer_id, request_note, visibility)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        resumeVersionsId,
+        requesterId,
+        finalReviewerId,
+        requestNote || null,
+        finalVisibility,
+      ]
     );
 
     await conn.commit();
 
     return res.status(201).json({
       request_id: result.insertId,
-      message: "Review request created",
+      visibility: finalVisibility,
+      message:
+        finalVisibility === "public"
+          ? "Public review request created"
+          : "Direct review request created",
     });
   } catch (err) {
     await conn.rollback();
     console.error("Error creating review request:", err);
 
     if (err.code === "ER_DUP_ENTRY") {
-      return res
-        .status(409)
-        .json({ message: "Request already exists for this reviewer/version" });
+      return res.status(409).json({
+        message: "Request already exists for this reviewer/version",
+      });
     }
 
+    // optional: log specific null/foreign key errors more nicely later
     return res.status(500).json({ message: "Error creating review request" });
   } finally {
     conn.release();
   }
 };
+
+
 
 // GET /api/review-requests/incoming
 export const getIncomingRequests = async (req, res) => {
