@@ -4,7 +4,7 @@ import { verifyToken } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// POST /api/resumes/:resumeId/versions
-router.post("/:resumeId/versions", verifyToken, createResumeVersion);
+// router.post("/:resumeId/versions", verifyToken, authorizeRoles("RQ"), createResumeVersion);
 
+router.post("/:resumeId/versions", verifyToken, createResumeVersion);
 export default router;

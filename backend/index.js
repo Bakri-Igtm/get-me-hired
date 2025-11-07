@@ -9,6 +9,7 @@ import resumeRoutes from "./routes/resumes.js";
 import authRoutes from "./routes/authRoutes.js";
 import reviewRoutes from "./routes/reviews.js";
 import reviewRequestRoutes from "./routes/reviewRequests.js";
+import reviewerRoutes from "./routes/reviewerRoutes.js";
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ app.use("/api/resumes", resumeRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/review-requests", reviewRequestRoutes);
+app.use("/api/reviewers", reviewerRoutes);
 
 app.listen(process.env.PORT, () => {
   console.log(`API running on port ${process.env.PORT}`);

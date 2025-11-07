@@ -1,4 +1,3 @@
-// controllers/reviewerController.js
 import bcrypt from "bcrypt";
 import pool from "../db.js";
 
