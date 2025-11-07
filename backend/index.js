@@ -10,6 +10,7 @@ import authRoutes from "./routes/authRoutes.js";
 import reviewRoutes from "./routes/reviews.js";
 import reviewRequestRoutes from "./routes/reviewRequests.js";
 import reviewerRoutes from "./routes/reviewerRoutes.js";
+import aiFeedbackRoutes from "./routes/aiFeedbackRoutes.js";
 
 dotenv.config();
 
@@ -40,6 +41,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/review-requests", reviewRequestRoutes);
 app.use("/api/reviewers", reviewerRoutes);
+app.use("/api/ai-feedback", aiFeedbackRoutes);
 
 app.listen(process.env.PORT, () => {
   console.log(`API running on port ${process.env.PORT}`);
