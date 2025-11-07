@@ -1,4 +1,3 @@
-// controllers/aiFeedbackController.js
 import pool from "../db.js";
 import OpenAI from "openai";
 
@@ -6,7 +5,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// 🌟 SYSTEM PROMPT LIVES HERE
+// SYSTEM PROMPT LIVES HERE
 const RESUME_FEEDBACK_SYSTEM_PROMPT = `
 You are an expert resume reviewer and career coach specializing in tech roles
 (software engineering, data, DevOps, product, etc.).
