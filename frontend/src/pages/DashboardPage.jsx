@@ -55,6 +55,7 @@ export default function DashboardPage() {
   // ---------------- HANDLERS: RESUMES & VERSIONS ----------------
   const handleResumeClick = async (resumeId) => {
     if (expandedResumeId === resumeId) {
+      // collapse
       setExpandedResumeId(null);
       setVersions([]);
       setSelectedVersion(null);
@@ -107,6 +108,7 @@ export default function DashboardPage() {
         api.get(`/api/reviews/version/${versionId}`),
       ]);
 
+      // Content
       if (
         contentRes.status === "fulfilled" &&
         contentRes.value?.data?.content
@@ -122,6 +124,7 @@ export default function DashboardPage() {
         }
       }
 
+      // AI Feedback (optional)
       if (
         feedbackRes.status === "fulfilled" &&
         feedbackRes.value?.data?.feedback
@@ -131,6 +134,7 @@ export default function DashboardPage() {
         setAiFeedback(null);
       }
 
+      // Human reviews (optional)
       if (reviewsRes.status === "fulfilled" && Array.isArray(reviewsRes.value.data)) {
         setReviews(reviewsRes.value.data);
       } else {
@@ -183,7 +187,7 @@ export default function DashboardPage() {
   return (
     <div className="mt-6">
       {/* Greeting */}
-      <section className="mb-4">
+      <section className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 mb-1">
           Hey {user.firstName} 👋
         </h1>
@@ -199,11 +203,11 @@ export default function DashboardPage() {
         </p>
       </section>
 
-      {/* 2-column grid layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT COLUMN — Account Info */}
-        <div className="lg:col-span-1 space-y-6">
-          <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm sticky top-20">
+      {/* 2-column grid: Account (left) / Resumes+Detail (right) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+        {/* LEFT COLUMN — Account info */}
+        <div className="space-y-6">
+          <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm md:sticky md:top-20">
             <h2 className="font-semibold text-slate-900 mb-2">Account</h2>
             <p className="text-xs text-slate-500 mb-1">
               Name:{" "}
@@ -218,14 +222,15 @@ export default function DashboardPage() {
               User ID: <span className="font-mono">{user.userId}</span>
             </p>
             <p className="text-[11px] text-slate-400 mt-2">
-              We&apos;ll expand this later with profile details, badges, and stats.
+              We&apos;ll expand this later with profile details, badges, and
+              stats.
             </p>
           </section>
         </div>
 
-        {/* RIGHT COLUMN — Resumes + Version Detail */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* My Resumes */}
+        {/* RIGHT COLUMN — Resumes + Version detail */}
+        <div className="space-y-6">
+          {/* My Resumes list */}
           <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <h2 className="font-semibold text-slate-900 mb-1">My Resumes</h2>
             <p className="text-xs text-slate-500 mb-3">
@@ -246,9 +251,9 @@ export default function DashboardPage() {
                 {resumes.map((resume) => (
                   <li
                     key={resume.resume_id}
-                    className={`py-3 px-2 rounded-md transition-colors cursor-pointer ${
+                    className={`py-3 px-2 rounded-md transition-all duration-200 cursor-pointer ${
                       expandedResumeId === resume.resume_id
-                        ? "bg-slate-50"
+                        ? "bg-slate-50 shadow-sm"
                         : "hover:bg-slate-50"
                     }`}
                     onClick={() => handleResumeClick(resume.resume_id)}
@@ -269,6 +274,7 @@ export default function DashboardPage() {
                       </span>
                     </div>
 
+                    {/* Versions */}
                     {expandedResumeId === resume.resume_id && (
                       <div
                         className="mt-3 border-t border-slate-200 pt-2"
@@ -279,7 +285,9 @@ export default function DashboardPage() {
                             Loading versions...
                           </p>
                         ) : versionsError ? (
-                          <p className="text-xs text-red-500">{versionsError}</p>
+                          <p className="text-xs text-red-500">
+                            {versionsError}
+                          </p>
                         ) : versions.length === 0 ? (
                           <p className="text-xs text-slate-500">
                             No versions yet for this resume.
@@ -289,7 +297,7 @@ export default function DashboardPage() {
                             {versions.map((v) => (
                               <li
                                 key={v.resume_versions_id}
-                                className={`flex items-center justify-between rounded-md px-2 py-1 text-xs border border-transparent hover:border-slate-300 cursor-pointer ${
+                                className={`flex items-center justify-between rounded-md px-2 py-1 text-xs border border-transparent hover:border-slate-300 cursor-pointer transition-all duration-150 ${
                                   selectedVersion &&
                                   selectedVersion.resume_versions_id ===
                                     v.resume_versions_id
@@ -321,7 +329,7 @@ export default function DashboardPage() {
             )}
           </section>
 
-          {/* Version Detail */}
+          {/* Version detail: content + feedback + comments */}
           {selectedVersion && (
             <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
