@@ -50,13 +50,7 @@ export default function AuthPage() {
       });
 
       const { token, user } = res.data;
-      login(token, {
-        userId: user.userId,
-        userType: user.userType,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-      });
+      login(token, user);
 
       navigate("/dashboard");
     } catch (err) {

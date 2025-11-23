@@ -5,6 +5,21 @@ import { useAuth } from "../context/AuthContext.jsx";
 export default function DashboardPage() {
   const { user } = useAuth();
 
+  // EXACTLY the same style as rev.user_type in comments
+  const rawType = user?.user_type || user?.userType;
+
+  const userTypeLabel =
+    rawType === "RQ"
+        ? "Requester"
+        : rawType === "RR"
+        ? "Reviewer"
+        : rawType === "AD"
+        ? "Admin"
+        : "Unknown";
+
+
+  const userId = user?.userId || user?.id || user?.user_id;
+
   // All resumes for this user
   const [resumes, setResumes] = useState([]);
   const [resumesLoading, setResumesLoading] = useState(true);
@@ -135,7 +150,10 @@ export default function DashboardPage() {
       }
 
       // Human reviews (optional)
-      if (reviewsRes.status === "fulfilled" && Array.isArray(reviewsRes.value.data)) {
+      if (
+        reviewsRes.status === "fulfilled" &&
+        Array.isArray(reviewsRes.value.data)
+      ) {
         setReviews(reviewsRes.value.data);
       } else {
         setReviews([]);
@@ -167,7 +185,7 @@ export default function DashboardPage() {
       const res = await api.post("/api/ai-feedback/generate", {
         resumeVersionsId: selectedVersion.resume_versions_id,
       });
-      setAiFeedback(res.data.feedback);
+        setAiFeedback(res.data.feedback);
     } catch (err) {
       console.error("Error generating AI feedback:", err);
       setAiError(
@@ -186,7 +204,7 @@ export default function DashboardPage() {
   // ---------------- UI ----------------
   return (
     <div className="mt-6">
-      {/* Greeting */}
+      Greeting
       <section className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 mb-1">
           Hey {user.firstName} 👋
@@ -194,38 +212,49 @@ export default function DashboardPage() {
         <p className="text-sm text-slate-600">
           You&apos;re logged in as{" "}
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900 text-slate-50 text-xs font-medium">
-            {user.userType === "RQ"
-              ? "Requester"
-              : user.userType === "RR"
-              ? "Reviewer"
-              : "Admin"}
+            {userTypeLabel}
           </span>
         </p>
       </section>
 
-      {/* 2-column grid: Account (left) / Resumes+Detail (right) */}
+      {/* 2-column grid: Left (account + leaderboard) / Right (resumes + detail) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-        {/* LEFT COLUMN — Account info */}
-        <div className="space-y-6">
-          <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm md:sticky md:top-20">
-            <h2 className="font-semibold text-slate-900 mb-2">Account</h2>
-            <p className="text-xs text-slate-500 mb-1">
-              Name:{" "}
-              <span className="font-medium">
-                {user.firstName} {user.lastName}
-              </span>
-            </p>
-            <p className="text-xs text-slate-500 mb-1">
-              Email: <span className="font-mono">{user.email}</span>
-            </p>
-            <p className="text-xs text-slate-500 mb-1">
-              User ID: <span className="font-mono">{user.userId}</span>
-            </p>
-            <p className="text-[11px] text-slate-400 mt-2">
-              We&apos;ll expand this later with profile details, badges, and
-              stats.
-            </p>
-          </section>
+        {/* LEFT COLUMN — Account + Leaderboard */}
+        <div className="lg:col-span-1 lg:sticky lg:top-20">
+          <div className="space-y-6 xl:space-y-0 xl:grid xl:grid-cols-2 xl:gap-4">
+            {/* Account card */}
+            <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+              <h2 className="font-semibold text-slate-900 mb-2">Account</h2>
+              <p className="text-xs text-slate-500 mb-1">
+                Name:{" "}
+                <span className="font-medium">
+                  {user.firstName} {user.lastName}
+                </span>
+              </p>
+              <p className="text-xs text-slate-500 mb-1">
+                Email: <span className="font-mono">{user.email}</span>
+              </p>
+              <p className="text-[11px] text-slate-400 mt-2">
+                We&apos;ll expand this later with profile details, badges, and stats.
+              </p>
+            </section>
+
+            {/* Leaderboard placeholder card */}
+            <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+              <h2 className="font-semibold text-slate-900 mb-2">Leaderboard</h2>
+              <p className="text-xs text-slate-500 mb-2">
+                See top reviewers, most active requesters, and recent highlights.
+              </p>
+              <div className="border border-dashed border-slate-300 rounded-lg p-3 text-xs text-slate-500 bg-slate-50">
+                Leaderboard coming soon. We&apos;ll surface stats like:
+                <ul className="list-disc list-inside mt-1 space-y-0.5">
+                  <li>Total reviews done</li>
+                  <li>Average review rating</li>
+                  <li>Badges & streaks</li>
+                </ul>
+              </div>
+            </section>
+          </div>
         </div>
 
         {/* RIGHT COLUMN — Resumes + Version detail */}

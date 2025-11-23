@@ -12,6 +12,8 @@ import reviewRequestRoutes from "./routes/reviewRequests.js";
 import reviewerRoutes from "./routes/reviewerRoutes.js";
 import aiFeedbackRoutes from "./routes/aiFeedbackRoutes.js";
 import resumeVersionRoutes from "./routes/resumeVersionRoutes.js";
+import profileRoutes from "./routes/profileRoutes.js";
+import directoryRoutes from "./routes/directoryRoutes.js";
 
 dotenv.config();
 
@@ -44,6 +46,8 @@ app.use("/api/review-requests", reviewRequestRoutes);
 app.use("/api/reviewers", reviewerRoutes);
 app.use("/api/ai-feedback", aiFeedbackRoutes);
 app.use("/api/resume-versions", resumeVersionRoutes);
+app.use("/api/profile", profileRoutes);
+app.use("/api/directory", directoryRoutes);
 
 app.listen(process.env.PORT, () => {
   console.log(`API running on port ${process.env.PORT}`);
