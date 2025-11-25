@@ -4,6 +4,10 @@ import {
   createOrUpdateReview,
   getReviewsForVersion,
 } from "../controllers/reviewController.js";
+import {
+  listReviewComments,
+  addReviewComment,
+} from "../controllers/reviewCommentController.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -12,6 +16,8 @@ const router = express.Router();
 router.post("/", verifyToken, createOrUpdateReview);
 
 // Get all reviews for a specific resume version
-router.get("/version/:resumeVersionsId", verifyToken, getReviewsForVersion);
+router.get("/version/:resumeVersionsId", verifyToken, getReviewsForVersion)
+router.get("/:id/comments", verifyToken, listReviewComments);
+router.post("/:id/comments", verifyToken, addReviewComment);;
 
 export default router;
