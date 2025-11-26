@@ -103,6 +103,19 @@ export const createOrUpdateReview = async (req, res) => {
       );
     }
 
+    // 5) 🔹 Auto-resolve PUBLIC review requests for this version
+    // Any public request on this resume version that is still pending
+    await conn.query(
+      `
+      UPDATE review_request
+      SET status = 'resolved', responded_at = NOW()
+      WHERE resume_versions_id = ?
+        AND visibility = 'public'
+        AND status = 'pending'
+      `,
+      [resumeVersionsId]
+    );
+
     await conn.commit();
 
     return res.status(201).json({

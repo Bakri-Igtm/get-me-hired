@@ -6,76 +6,92 @@ import pool from "../db.js";
  * Body: { resumeVersionsId, reviewerId, requestNote }
  * requester = current logged-in user (from token)
  */
+// POST /api/review-requests
 export const createReviewRequest = async (req, res) => {
+  const {
+    resumeVersionsId,
+    reviewerId,   // may be null for public
+    visibility,   // 'public' | 'private' (from frontend)
+    track,
+    requestNote,
+  } = req.body;
+
+  const requesterId = req.user.userId;
+
+  if (!resumeVersionsId) {
+    return res
+      .status(400)
+      .json({ message: "resumeVersionsId is required" });
+  }
+
+  // 🔹 Normalize / fallback visibility
+  const rawVisibility = visibility;
+  let vis;
+
+  if (rawVisibility === "public") {
+    vis = "public";
+  } else if (rawVisibility === "private") {
+    vis = "private";
+  } else {
+    // If visibility isn't explicitly set:
+    // - If there's a reviewerId, treat as private.
+    // - If there's no reviewerId, treat as public.
+    vis = reviewerId ? "private" : "public";
+  }
+
+  // 🔹 For PRIVATE: reviewerId is required
+  if (vis === "private" && !reviewerId) {
+    return res
+      .status(400)
+      .json({ message: "reviewerId is required for private requests" });
+  }
+
   try {
-    const requesterId = req.user.userId;
-    const { resumeVersionsId, reviewerId, requestNote } = req.body;
-
-    if (!resumeVersionsId || !reviewerId) {
-      return res
-        .status(400)
-        .json({ message: "resumeVersionsId and reviewerId are required" });
-    }
-
-    // 1) Check that the resume version exists and belongs to requester
-    const [rvRows] = await pool.query(
-      `
-      SELECT rv.resume_versions_id, r.resume_id, r.user_id AS owner_id
-      FROM resume_versions rv
-      JOIN resume r ON r.resume_id = rv.resume_id
-      WHERE rv.resume_versions_id = ?
-      `,
+    // Make sure version exists
+    const [vRows] = await pool.query(
+      `SELECT resume_versions_id FROM resume_versions WHERE resume_versions_id = ?`,
       [resumeVersionsId]
     );
-
-    if (rvRows.length === 0) {
-      return res.status(404).json({ message: "Resume version not found" });
+    if (vRows.length === 0) {
+      return res.status(400).json({ message: "Invalid resumeVersionsId" });
     }
 
-    const rv = rvRows[0];
-    if (rv.owner_id !== requesterId) {
-      return res
-        .status(403)
-        .json({ message: "You can only request reviews on your own resume" });
-    }
-
-    // 2) Ensure reviewer exists
-    const [reviewerRows] = await pool.query(
-      `SELECT user_id FROM users WHERE user_id = ?`,
-      [reviewerId]
-    );
-    if (reviewerRows.length === 0) {
-      return res.status(404).json({ message: "Reviewer user not found" });
-    }
-
-    // 3) Insert review_request (status = 'pending')
-    try {
-      const [result] = await pool.query(
-        `
-        INSERT INTO review_request
-          (resume_versions_id, requester_id, reviewer_id, request_note, status)
-        VALUES (?, ?, ?, ?, 'pending')
-        `,
-        [resumeVersionsId, requesterId, reviewerId, requestNote || null]
+    // If private, make sure reviewer exists
+    if (vis === "private" && reviewerId) {
+      const [uRows] = await pool.query(
+        `SELECT user_id FROM users WHERE user_id = ?`,
+        [reviewerId]
       );
-
-      return res.status(201).json({
-        message: "Review request created",
-        request_id: result.insertId,
-      });
-    } catch (err) {
-      // handle duplicate active request by unique constraint
-      if (err.code === "ER_DUP_ENTRY") {
-        return res.status(409).json({
-          message:
-            "You already have an active request for this reviewer on this version",
-        });
+      if (uRows.length === 0) {
+        return res.status(400).json({ message: "Invalid reviewerId" });
       }
-      throw err;
     }
+
+    const [result] = await pool.query(
+      `
+      INSERT INTO review_request
+        (resume_versions_id, requester_id, reviewer_id, visibility, track, request_note)
+      VALUES (?, ?, ?, ?, ?, ?)
+      `,
+      [
+        resumeVersionsId,
+        requesterId,
+        vis === "private" ? reviewerId : null, // 🔑 null for public
+        vis,
+        track || null,
+        requestNote || null,
+      ]
+    );
+
+    return res.status(201).json({
+      request_id: result.insertId,
+      message: "Review request created",
+    });
   } catch (err) {
     console.error("createReviewRequest error:", err);
-    return res.status(500).json({ message: "Error creating review request" });
+    return res
+      .status(500)
+      .json({ message: "Error creating review request" });
   }
 };
 
@@ -84,10 +100,11 @@ export const createReviewRequest = async (req, res) => {
  * Requests where current user is the invited reviewer.
  * Used for the left-side "feed" of cards.
  */
+// GET /api/review-requests/incoming
 export const getIncomingRequests = async (req, res) => {
-  try {
-    const userId = req.user.userId;
+  const userId = req.user.userId;
 
+  try {
     const [rows] = await pool.query(
       `
       SELECT
@@ -95,21 +112,33 @@ export const getIncomingRequests = async (req, res) => {
         rr.resume_versions_id,
         rr.requester_id,
         rr.reviewer_id,
-        rr.request_note,
+        rr.visibility,
+        rr.track,
         rr.status,
         rr.created_at,
-        u.user_fname  AS requesterFirstName,
-        u.user_lname  AS requesterLastName,
-        u.user_type   AS requesterType,
-        p.headline    AS requesterHeadline,
-        p.avatar_url  AS requesterAvatar
+        rr.request_note,
+
+        rq.user_fname  AS requesterFirstName,
+        rq.user_lname  AS requesterLastName,
+        rq.user_type   AS requesterType,
+        pr.headline    AS requesterHeadline
+
       FROM review_request rr
-      JOIN users u ON u.user_id = rr.requester_id
-      LEFT JOIN profile p ON p.user_id = u.user_id
-      WHERE rr.reviewer_id = ?
-      ORDER BY rr.created_at DESC, rr.request_id DESC
+      JOIN users rq ON rq.user_id = rr.requester_id
+      LEFT JOIN profile pr ON pr.user_id = rq.user_id
+
+      WHERE
+        -- 1) private requests explicitly addressed to me
+        (rr.visibility = 'private' AND rr.reviewer_id = ?)
+
+        OR
+
+        -- 2) public requests from other users (feed)
+        (rr.visibility = 'public' AND rr.requester_id <> ?)
+
+      ORDER BY rr.created_at DESC
       `,
-      [userId]
+      [userId, userId]
     );
 
     return res.json({ requests: rows });
@@ -117,9 +146,11 @@ export const getIncomingRequests = async (req, res) => {
     console.error("getIncomingRequests error:", err);
     return res
       .status(500)
-      .json({ message: "Error loading incoming review requests" });
+      .json({ message: "Error fetching incoming review requests" });
   }
 };
+
+
 
 /**
  * GET /api/review-requests/outgoing
@@ -145,7 +176,7 @@ export const getOutgoingRequests = async (req, res) => {
         p.headline    AS reviewerHeadline,
         p.avatar_url  AS reviewerAvatar
       FROM review_request rr
-      JOIN users u ON u.user_id = rr.reviewer_id
+      LEFT JOIN users u ON u.user_id = rr.reviewer_id
       LEFT JOIN profile p ON p.user_id = u.user_id
       WHERE rr.requester_id = ?
       ORDER BY rr.created_at DESC, rr.request_id DESC
@@ -170,27 +201,31 @@ export const getOutgoingRequests = async (req, res) => {
  */
 export const respondToReviewRequest = async (req, res) => {
   try {
-    const userId = req.user.userId;
     const { id } = req.params;
-    const { status } = req.body; // 'accepted', 'declined', 'cancelled', etc.
+    const { status } = req.body; // "accepted", "declined", or "cancelled"
+    const requestId = Number(id);
+    const userId = req.user.userId;
 
-    const validStatuses = ["accepted", "declined", "cancelled"];
-    if (!validStatuses.includes(status)) {
+    if (!requestId) {
+      return res.status(400).json({ message: "Invalid request id" });
+    }
+
+    if (!["accepted", "declined", "cancelled"].includes(status)) {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    // get the existing request to enforce who is allowed to update it
     const [rows] = await pool.query(
       `
       SELECT
         request_id,
         requester_id,
         reviewer_id,
-        status
+        visibility,
+        status AS currentStatus
       FROM review_request
       WHERE request_id = ?
       `,
-      [id]
+      [requestId]
     );
 
     if (rows.length === 0) {
@@ -198,57 +233,64 @@ export const respondToReviewRequest = async (req, res) => {
     }
 
     const reqRow = rows[0];
-    const isReviewer = reqRow.reviewer_id === userId;
-    const isRequester = reqRow.requester_id === userId;
 
-    if (!isReviewer && !isRequester) {
-      return res
-        .status(403)
-        .json({ message: "You are not allowed to update this request" });
+    const isRequester = reqRow.requester_id === userId;
+    const isReviewer = reqRow.reviewer_id === userId;
+
+    // 🔹 Public requests should NOT be accepted/declined
+    if (reqRow.visibility === "public") {
+      return res.status(400).json({
+        message:
+          "Public requests cannot be accepted or declined. Just leave a review.",
+      });
     }
 
-    // simple rule: only pending requests can change
-    if (reqRow.status !== "pending") {
+    // 🔹 Only allow updates while pending
+    if (reqRow.currentStatus !== "pending") {
       return res
         .status(400)
         .json({ message: "This request is no longer pending" });
     }
 
-    // if requester is cancelling, allow status='cancelled'
-    // if reviewer, allow accepted/declined
-    if (isReviewer && (status === "accepted" || status === "declined")) {
-      // ok
-    } else if (isRequester && status === "cancelled") {
-      // ok
+    // 🔹 Rules:
+    // - "accepted" / "declined": only invited reviewer can do this
+    // - "cancelled": only requester can do this
+    if (status === "cancelled") {
+      if (!isRequester) {
+        return res
+          .status(403)
+          .json({ message: "You are not allowed to cancel this request" });
+      }
     } else {
-      return res
-        .status(403)
-        .json({ message: "You are not allowed to set this status" });
+      // accepted / declined
+      if (!isReviewer) {
+        return res
+          .status(403)
+          .json({ message: "You are not allowed to update this request" });
+      }
     }
 
-    const [result] = await pool.query(
+    await pool.query(
       `
       UPDATE review_request
       SET status = ?, responded_at = NOW()
       WHERE request_id = ?
       `,
-      [status, id]
+      [status, requestId]
     );
 
-    if (result.affectedRows === 0) {
-      return res
-        .status(400)
-        .json({ message: "Failed to update review request" });
-    }
-
-    return res.json({ message: "Review request updated", status });
+    return res.json({
+      message: "Review request updated",
+      status,
+    });
   } catch (err) {
     console.error("respondToReviewRequest error:", err);
     return res
       .status(500)
-      .json({ message: "Error responding to review request" });
+      .json({ message: "Error updating review request" });
   }
 };
+
 
 /**
  * GET /api/review-requests/:id
@@ -276,7 +318,7 @@ export const getReviewRequestDetail = async (req, res) => {
       return res.status(400).json({ message: "Invalid request id" });
     }
 
-    // Base request + requester + reviewer + resume version/content
+    // Base request + requester + (optional) reviewer + resume version/content
     const [rows] = await pool.query(
       `
       SELECT
@@ -287,6 +329,8 @@ export const getReviewRequestDetail = async (req, res) => {
         rr.request_note,
         rr.status,
         rr.created_at,
+        rr.visibility,
+        rr.track,
 
         req.user_fname  AS requesterFirstName,
         req.user_lname  AS requesterLastName,
@@ -301,7 +345,7 @@ export const getReviewRequestDetail = async (req, res) => {
         r.track         AS resumeTrack
       FROM review_request rr
       JOIN users req ON req.user_id = rr.requester_id
-      JOIN users rev ON rev.user_id = rr.reviewer_id
+      LEFT JOIN users rev ON rev.user_id = rr.reviewer_id  -- 🔑 LEFT JOIN for public (no reviewer)
       JOIN resume_versions rv ON rv.resume_versions_id = rr.resume_versions_id
       JOIN resume r ON r.resume_id = rv.resume_id
       WHERE rr.request_id = ?
@@ -315,13 +359,28 @@ export const getReviewRequestDetail = async (req, res) => {
 
     const base = rows[0];
 
-    // Authorization
+    // Authorization + who can review
     const isRequester = userId === base.requester_id;
-    const isReviewer = userId === base.reviewer_id;
+    let isReviewer = false;
+
+    // private: only the invited reviewer can review
+    if (base.visibility === "private") {
+      isReviewer = base.reviewer_id === userId;
+    }
+    // public: anyone except the requester can review
+    else if (base.visibility === "public") {
+      isReviewer = base.requester_id !== userId;
+    }
+
     const isAdmin = myType === "AD";
 
+    // If you want to block totally random users from seeing it,
+    // keep this check. For public, isReviewer is true for everyone
+    // except the requester, so they can see.
     if (!isRequester && !isReviewer && !isAdmin) {
-      return res.status(403).json({ message: "Not allowed to view this request" });
+      return res
+        .status(403)
+        .json({ message: "Not allowed to view this request" });
     }
 
     // AI feedback for this resume version
@@ -398,6 +457,7 @@ export const getReviewRequestDetail = async (req, res) => {
       .json({ message: "Error loading review request detail" });
   }
 };
+
 
 // import pool from "../db.js";
 
