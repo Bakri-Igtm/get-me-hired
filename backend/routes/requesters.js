@@ -1,10 +1,10 @@
 import express from "express";
 import { createRequester } from "../controllers/requesterController.js";
-import { verifyToken } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
 // POST /api/requesters
-router.post("/", verifyToken, createRequester);
+// Public endpoint for requester signup (no token required)
+router.post("/", createRequester);
 
 export default router;

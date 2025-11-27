@@ -1,7 +1,8 @@
 // src/pages/ReviewRequestsPage.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import api from "../api/axios.js";
 import {
   fetchIncomingRequests,
   fetchOutgoingRequests,
@@ -64,7 +65,7 @@ export default function ReviewRequestsPage() {
   // accept / decline
   const [responding, setResponding] = useState(false);
 
-  // 🔹 New Request UI state
+  // New Request UI state
   const [showNewRequestForm, setShowNewRequestForm] = useState(false);
   const [visibility, setVisibility] = useState("private"); // "private" | "public"
   const [reviewerOptions, setReviewerOptions] = useState([]);
@@ -76,10 +77,14 @@ export default function ReviewRequestsPage() {
   const [newFile, setNewFile] = useState(null);
   const [formError, setFormError] = useState("");
 
+  // ask AI feedback?
+  const [aiRequested, setAiRequested] = useState(true);
+
   // your resume versions
   const [myVersions, setMyVersions] = useState([]);
   const [myVersionsLoading, setMyVersionsLoading] = useState(false);
-  const [selectedResumeVersionId, setSelectedResumeVersionId] = useState(null);
+  const [selectedResumeVersionId, setSelectedResumeVersionId] =
+    useState(null);
   const [myResumeMeta, setMyResumeMeta] = useState(null); // { track, resumeId, ... }
 
   // tab: "received" or "sent"
@@ -93,13 +98,10 @@ export default function ReviewRequestsPage() {
   const [loadingSent, setLoadingSent] = useState(false);
   const [sentError, setSentError] = useState("");
 
-
   const loadIncoming = async () => {
     try {
       setLoadingList(true);
       const { data } = await fetchIncomingRequests();
-      console.log("incoming data from API:", data); // 🔍 add this
-
       setRequests(data.requests || []);
       setListError("");
       if (data.requests && data.requests.length > 0) {
@@ -133,26 +135,6 @@ export default function ReviewRequestsPage() {
     }
   };
 
-
-  // // Load feed
-  // const loadIncoming = async () => {
-  //   try {
-  //     setMyVersionsLoading(true);
-  //     const { data } = await fetchMyResumeWithVersions();
-  //     // data = { resumeId, track, createdAt, latestVersionId, versions: [...] }
-  //     setMyResumeMeta({
-  //       resumeId: data.resumeId,
-  //       track: data.track,
-  //       createdAt: data.createdAt,
-  //     });
-  //     setMyVersions(data.versions || []);
-  //   } catch (e) {
-  //     console.error("fetchMyResumeWithVersions error:", e);
-  //   } finally {
-  //     setMyVersionsLoading(false);
-  //   }
-  // };
-
   useEffect(() => {
     loadIncoming();
   }, []);
@@ -162,7 +144,6 @@ export default function ReviewRequestsPage() {
       loadOutgoing();
     }
   }, [activeTab, sentRequests.length, loadingSent]);
-
 
   // Load detail when selectedId changes
   useEffect(() => {
@@ -285,7 +266,7 @@ export default function ReviewRequestsPage() {
     }
   };
 
-  // 🔹 Accept / Decline
+  // Accept / Decline
   const handleRespond = async (status) => {
     if (!detail?.request) return;
     try {
@@ -314,7 +295,7 @@ export default function ReviewRequestsPage() {
     }
   };
 
-  // 🔹 Open "Request review" form
+  // Open "Request review" form
   const handleOpenNewRequestForm = async (
     prefillReviewerId = null,
     prefillReviewerName = ""
@@ -327,6 +308,8 @@ export default function ReviewRequestsPage() {
     setNewNote("");
     setNewFile(null);
     setSelectedResumeVersionId(null);
+    setFormError("");
+    setAiRequested(true); // default: ask AI
 
     // Load potential reviewers (directory)
     if (!reviewerOptions.length) {
@@ -346,6 +329,8 @@ export default function ReviewRequestsPage() {
       setMyVersionsLoading(true);
       const { data } = await fetchMyResumeVersions();
       setMyVersions(data.versions || []);
+      // optionally set myResumeMeta if backend sends it
+      // setMyResumeMeta({ ... })
     } catch (e) {
       console.error("fetchMyResumeVersions error:", e);
     } finally {
@@ -357,9 +342,8 @@ export default function ReviewRequestsPage() {
     setShowNewRequestForm(false);
   };
 
-  // 🔹 Actually send the request (private, targeted for now)
+  // Actually send the request
   const handleSubmitNewRequest = async () => {
-    // VALIDATION BLOCK ⬇⬇⬇
     if (!selectedResumeVersionId) {
       setFormError("Please select a resume version.");
       return;
@@ -370,23 +354,20 @@ export default function ReviewRequestsPage() {
       return;
     }
 
-    // Clear old errors
     setFormError("");
-    // END VALIDATION BLOCK ⬆⬆⬆
 
     try {
       await createReviewRequest({
-      resumeVersionsId: selectedResumeVersionId,
-      // only send reviewerId if private; otherwise null
-      reviewerId: visibility === "private" ? selectedReviewerId : null,
-      visibility,              // 'public' or 'private'
-      track: newTrack || null, // e.g. "SWE"
-      requestNote: newNote || null, // just the human description
-    });
+        resumeVersionsId: selectedResumeVersionId,
+        reviewerId: visibility === "private" ? selectedReviewerId : null,
+        visibility, // 'public' or 'private'
+        track: newTrack || null, // e.g. "SWE"
+        requestNote: newNote || null,
+        aiRequested, // send to backend
+      });
 
       alert("Review request sent!");
       setShowNewRequestForm(false);
-      // Optionally reload outgoing later; incoming is for the reviewer.
     } catch (e) {
       console.error("createReviewRequest error:", e);
       alert(
@@ -402,7 +383,9 @@ export default function ReviewRequestsPage() {
     .filter((m) => {
       if (!reviewerSearch.trim()) return true;
       const q = reviewerSearch.toLowerCase();
-      const fullName = `${m.firstName || ""} ${m.lastName || ""}`.toLowerCase();
+      const fullName = `${m.firstName || ""} ${
+        m.lastName || ""
+      }`.toLowerCase();
       return (
         fullName.includes(q) ||
         (m.headline || "").toLowerCase().includes(q)
@@ -410,7 +393,7 @@ export default function ReviewRequestsPage() {
     })
     .slice(0, 10);
 
-  // 🔹 Prefill from public profile (navigate with state)
+  // Prefill from public profile
   useEffect(() => {
     const prefillId = location.state?.prefillReviewerId;
     const prefillName = location.state?.prefillReviewerName;
@@ -438,7 +421,8 @@ export default function ReviewRequestsPage() {
             Review Requests
           </h1>
           <p className="text-sm text-slate-600">
-            See requests sent to you, requests you've sent, and drop detailed feedback.
+            See requests sent to you, requests you've sent, and drop
+            detailed feedback.
           </p>
 
           {/* Tabs: Received / Sent */}
@@ -524,12 +508,13 @@ export default function ReviewRequestsPage() {
         )}
       </header>
 
-
       <div className="grid gap-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)]">
-        {/* LEFT: Feed of incoming requests */}
+        {/* LEFT: Feed */}
         <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-900 mb-3">
-            {activeTab === "received" ? "Requests for you" : "Requests you’ve sent"}
+            {activeTab === "received"
+              ? "Requests for you"
+              : "Requests you’ve sent"}
           </h2>
 
           {activeTab === "received" ? (
@@ -592,7 +577,6 @@ export default function ReviewRequestsPage() {
             </>
           )}
         </section>
-
 
         {/* RIGHT: Detail */}
         <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm min-h-[280px]">
@@ -709,8 +693,10 @@ export default function ReviewRequestsPage() {
                   <option value="">Select a version…</option>
                   {myVersions.map((v) => {
                     const label = `${
-                      myResumeMeta?.track || "Untitled"
-                    } • v${v.version_number} • ${formatDate(v.uploaded_at)}`;
+                      myResumeMeta?.track || "Resume"
+                    } • v${v.version_number} • ${formatDate(
+                      v.uploaded_at
+                    )}`;
                     return (
                       <option
                         key={v.resume_versions_id}
@@ -818,6 +804,29 @@ export default function ReviewRequestsPage() {
               />
             </div>
 
+            {/* AI feedback toggle */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-slate-700">
+                AI feedback
+              </label>
+              <div className="flex items-start gap-2 text-[11px]">
+                <input
+                  type="checkbox"
+                  id="aiRequested"
+                  className="mt-[2px]"
+                  checked={aiRequested}
+                  onChange={(e) => setAiRequested(e.target.checked)}
+                />
+                <label htmlFor="aiRequested" className="text-slate-600">
+                  Ask AI to privately review this resume too.
+                  <span className="block text-[10px] text-slate-400">
+                    Only you (the requester) will see the AI suggestions
+                    side panel. Reviewers and the public won’t see it.
+                  </span>
+                </label>
+              </div>
+            </div>
+
             {/* Upload (UI only for now) */}
             <div className="space-y-1">
               <label className="text-[11px] font-medium text-slate-700">
@@ -841,6 +850,10 @@ export default function ReviewRequestsPage() {
                 (Upload behavior not wired yet – this just updates the UI.)
               </p>
             </div>
+
+            {formError && (
+              <p className="text-[11px] text-red-600">{formError}</p>
+            )}
 
             <div className="flex justify-end gap-2 pt-1">
               <button
@@ -913,7 +926,9 @@ function RequestCard({ req, active, onClick }) {
             {requesterHeadline || "No headline yet"}
           </p>
         </div>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColor}`}>
+        <span
+          className={`text-[10px] px-2 py-0.5 rounded-full ${statusColor}`}
+        >
           {status}
         </span>
       </div>
@@ -951,6 +966,341 @@ function DetailView(props) {
 
   const { request, aiFeedback, reviews, canSeeAiFeedback } = detail;
   const canDropReview = detail.isReviewer;
+  const isOwner = detail.isRequester;
+
+  // "Word doc" content
+  const [editorContent, setEditorContent] = useState(
+    request.resumeContent || ""
+  );
+
+  // Ref to textarea for auto-scrolling
+  const textareaRef = useRef(null);
+  const highlightLayerRef = useRef(null);
+
+  useEffect(() => {
+    setEditorContent(request.resumeContent || "");
+  }, [request.resumeContent, request.request_id]);
+
+  // Side-panel suggestions from aiFeedback structured JSON
+  const [localSuggestions, setLocalSuggestions] = useState([]);
+  const [feedbackSummary, setFeedbackSummary] = useState(null);
+
+  // Track highlighted ranges for accepted suggestions
+  const [highlightedRanges, setHighlightedRanges] = useState([]);
+
+  // Sync scroll between textarea and highlight layer
+  useEffect(() => {
+    const handleScroll = () => {
+      if (textareaRef.current && highlightLayerRef.current) {
+        highlightLayerRef.current.scrollTop = textareaRef.current.scrollTop;
+        highlightLayerRef.current.scrollLeft = textareaRef.current.scrollLeft;
+      }
+    };
+
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.addEventListener("scroll", handleScroll);
+      return () => textarea.removeEventListener("scroll", handleScroll);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!aiFeedback?.feedback_text) {
+      setLocalSuggestions([]);
+      setFeedbackSummary(null);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(aiFeedback.feedback_text);
+
+      const suggestions = Array.isArray(parsed.suggestions)
+        ? parsed.suggestions
+        : [];
+      const summary = parsed.summary || null;
+
+      // Use status from backend, default to "pending"
+      const mapped = suggestions.map((s) => ({
+        ...s,
+        status: s.status || "pending",
+      }));
+
+      setLocalSuggestions(mapped);
+      setFeedbackSummary(summary);
+    } catch (err) {
+      console.error("✗ Failed to parse AI feedback JSON:", err);
+      console.log("Raw feedback_text:", aiFeedback.feedback_text);
+      setLocalSuggestions([]);
+      setFeedbackSummary(null);
+    }
+  }, [aiFeedback]);
+
+  const handleAcceptSuggestion = async (suggestion) => {
+    const { id, type, original, suggested, anchor } = suggestion;
+
+    console.log("🔵 Accepting suggestion:", {
+      id,
+      type,
+      original,
+      suggested,
+      anchor,
+    });
+    console.log("📄 Current editorContent length:", editorContent.length);
+
+    // Apply the change to editorContent based on type
+    let updatedContent = editorContent;
+    let changeApplied = false;
+
+    if (type === "rewrite" || type === "replace") {
+      // Replace original with suggested
+      if (original && suggested) {
+        // Try exact match first
+        if (editorContent.includes(original)) {
+          console.log("✓ Found exact match");
+          updatedContent = editorContent.replace(original, suggested);
+          changeApplied = true;
+        } else {
+          console.log(
+            "✗ No exact match. Trying fuzzy match with normalized whitespace..."
+          );
+
+          const normalize = (str) => str.replace(/\s+/g, " ").trim();
+          const normalizedOriginal = normalize(original);
+          const normalizedContent = normalize(editorContent);
+
+          if (normalizedContent.includes(normalizedOriginal)) {
+            console.log("✓ Found match after normalization, applying...");
+            const escapedPattern = normalizedOriginal.replace(
+              /[.*+?^${}()|[\]\\]/g,
+              "\\$&"
+            );
+            const flexibleRegex = new RegExp(
+              escapedPattern.replace(/\s+/g, "\\s+"),
+              "gi"
+            );
+
+            if (flexibleRegex.test(editorContent)) {
+              updatedContent = editorContent.replace(
+                flexibleRegex,
+                suggested
+              );
+              changeApplied = true;
+              console.log("✓ Replaced with flexible regex");
+            }
+          } else {
+            console.log(
+              "✗ No fuzzy match found. Content not found in resume."
+            );
+            console.log(
+              "Looking for:",
+              normalizedOriginal.substring(0, 100)
+            );
+            console.log(
+              "In content:",
+              normalizedContent.substring(0, 100)
+            );
+          }
+        }
+      }
+    } else if (type === "remove") {
+      // Remove the original text
+      if (original) {
+        if (editorContent.includes(original)) {
+          console.log("✓ Found text to remove (exact)");
+          updatedContent = editorContent.replace(original, "");
+          changeApplied = true;
+        } else {
+          console.log("✗ Trying fuzzy match for removal...");
+          const normalize = (str) => str.replace(/\s+/g, " ").trim();
+          const normalizedOriginal = normalize(original);
+          const normalizedContent = normalize(editorContent);
+
+          if (normalizedContent.includes(normalizedOriginal)) {
+            const escapedPattern = normalizedOriginal.replace(
+              /[.*+?^${}()|[\]\\]/g,
+              "\\$&"
+            );
+            const flexibleRegex = new RegExp(
+              escapedPattern.replace(/\s+/g, "\\s+"),
+              "i"
+            );
+            if (flexibleRegex.test(editorContent)) {
+              updatedContent = editorContent.replace(flexibleRegex, "");
+              changeApplied = true;
+              console.log("✓ Removed with flexible regex");
+            }
+          }
+        }
+      }
+    } else if (type === "add") {
+      // Add suggested text (append to content or insert at anchor)
+      if (suggested) {
+        if (anchor && editorContent.includes(anchor)) {
+          console.log("✓ Found anchor, inserting after it");
+          updatedContent = editorContent.replace(
+            anchor,
+            anchor + "\n" + suggested
+          );
+          changeApplied = true;
+        } else if (anchor) {
+          const normalize = (str) => str.replace(/\s+/g, " ").trim();
+          const normalizedAnchor = normalize(anchor);
+          const normalizedContent = normalize(editorContent);
+
+          if (normalizedContent.includes(normalizedAnchor)) {
+            const escapedPattern = normalizedAnchor.replace(
+              /[.*+?^${}()|[\]\\]/g,
+              "\\$&"
+            );
+            const flexibleRegex = new RegExp(
+              escapedPattern.replace(/\s+/g, "\\s+"),
+              "i"
+            );
+            if (flexibleRegex.test(editorContent)) {
+              updatedContent = editorContent.replace(
+                flexibleRegex,
+                anchor + "\n" + suggested
+              );
+              changeApplied = true;
+              console.log("✓ Found anchor with fuzzy match, inserting");
+            }
+          } else {
+            console.log("✓ Anchor not found, appending to end");
+            updatedContent = editorContent + "\n" + suggested;
+            changeApplied = true;
+          }
+        } else {
+          console.log("✓ No anchor, appending to end");
+          updatedContent = editorContent + "\n" + suggested;
+          changeApplied = true;
+        }
+      }
+    }
+
+    console.log("🟢 Change applied:", changeApplied);
+
+    // Update editor content locally
+    setEditorContent(updatedContent);
+
+    // Track highlighted range for the new text
+    if (changeApplied && suggested) {
+      const startPos = updatedContent.indexOf(suggested);
+      if (startPos !== -1) {
+        const endPos = startPos + suggested.length;
+        setHighlightedRanges((prev) => [
+          ...prev,
+          { id, start: startPos, end: endPos },
+        ]);
+      }
+    }
+
+    try {
+      // Persist status to backend
+      await api.patch(
+        `/api/review-requests/${request.request_id}/ai-suggestions`,
+        {
+          suggestionId: id,
+          status: "accepted",
+        }
+      );
+
+      // Mark suggestion as accepted
+      setLocalSuggestions((prev) =>
+        prev.map((s) =>
+          s.id === id ? { ...s, status: "accepted", changeApplied } : s
+        )
+      );
+    } catch (err) {
+      console.error("❌ Error updating suggestion status:", err);
+      alert(
+        err.response?.data?.message ||
+          "Error saving suggestion status. Try again."
+      );
+    }
+  };
+
+  const handleRejectSuggestion = async (id) => {
+    try {
+      await api.patch(
+        `/api/review-requests/${request.request_id}/ai-suggestions`,
+        {
+          suggestionId: id,
+          status: "rejected",
+        }
+      );
+
+      setLocalSuggestions((prev) =>
+        prev.map((s) =>
+          s.id === id ? { ...s, status: "rejected" } : s
+        )
+      );
+
+      // Remove highlight for rejected suggestion
+      setHighlightedRanges((prev) =>
+        prev.filter((range) => range.id !== id)
+      );
+    } catch (err) {
+      console.error("❌ Error rejecting suggestion:", err);
+      alert(
+        err.response?.data?.message ||
+          "Error saving suggestion status. Try again."
+      );
+    }
+  };
+
+  const handleSaveAsNewVersion = async () => {
+    if (!detail?.request || !editorContent.trim()) {
+      alert("Resume content is empty");
+      return;
+    }
+
+    console.log("💾 Saving new version...");
+    console.log("📋 Resume ID:", detail.request.resume_id);
+    console.log("📝 Content length:", editorContent.length);
+
+    try {
+      // Step 1: Create new resume version with edited content
+      const payload = {
+        resumeId: detail.request.resume_id,
+        content: editorContent,
+      };
+
+      console.log("📤 Sending payload:", payload);
+
+      const response = await api.post("/resume-versions", payload);
+
+      console.log("📥 Response data:", response.data);
+
+      const newVersionId = response.data.resume_versions_id;
+      console.log("📌 New version ID:", newVersionId);
+
+      // Step 2: Update the review_request to point to the new version
+      console.log(
+        "🔄 Updating review request to point to new version..."
+      );
+      const updateResponse = await api.put(
+        `/review-requests/${detail.request.request_id}/resume-version`,
+        {
+          resumeVersionsId: newVersionId,
+        }
+      );
+
+      console.log("✅ Review request updated:", updateResponse.data);
+
+      alert(
+        "✓ Resume version saved successfully! Your changes will persist across page refreshes."
+      );
+    } catch (err) {
+      console.error("❌ Error saving resume version:", err);
+      alert(
+        "Error saving resume version: " +
+          (err.response?.data?.message || err.message)
+      );
+    }
+  };
+
+  // show AI panel only if request asked for AI + backend says user can see it
+  const showAiPanel = !!request.ai_requested && canSeeAiFeedback;
 
   return (
     <div className="flex flex-col gap-4 h-full">
@@ -959,10 +1309,12 @@ function DetailView(props) {
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="text-xs text-slate-500 mb-1">
-              Request #{request.request_id} • {formatDate(request.created_at)}
+              Request #{request.request_id} •{" "}
+              {formatDate(request.created_at)}
             </p>
             <p className="text-sm font-semibold text-slate-900">
-              From: {request.requesterFirstName} {request.requesterLastName}{" "}
+              From: {request.requesterFirstName}{" "}
+              {request.requesterLastName}{" "}
               <span className="text-[11px] text-slate-500">
                 ({roleLabel(request.requesterType)})
               </span>
@@ -993,37 +1345,366 @@ function DetailView(props) {
                 Decline
               </button>
             </div>
-        )}
+          )}
 
         <p className="mt-1 text-sm text-slate-700 whitespace-pre-wrap">
           {request.request_note || "No additional description provided."}
         </p>
       </div>
 
-      {/* Resume content */}
-      <div className="flex-1 min-h-[140px] max-h-64 border border-slate-200 rounded-lg p-3 bg-slate-50 overflow-auto">
-        <h3 className="text-xs font-semibold text-slate-900 mb-1">
-          Resume preview
-        </h3>
-        <p className="text-xs text-slate-800 whitespace-pre-wrap">
-          {request.resumeContent || "No resume content available."}
-        </p>
-      </div>
+      {/* Middle: Resume doc (and AI panel if allowed) */}
+      {showAiPanel ? (
+        <div className="flex flex-col md:flex-row gap-3">
+          {/* "Word document" style area */}
+          <div className="flex-1 flex flex-col gap-2">
+            <div className="text-xs text-slate-500 flex items-center justify-between">
+              <span>Resume preview</span>
+              {isOwner ? (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+                  {
+                    localSuggestions.filter(
+                      (s) => s.status === "accepted"
+                    ).length
+                  }{" "}
+                  changes applied
+                </span>
+              ) : (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-100">
+                  Read-only for you
+                </span>
+              )}
+            </div>
 
-      {/* AI feedback — only visible to requester / admin */}
-      {canSeeAiFeedback && aiFeedback && (
-        <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-3">
-          <h3 className="text-xs font-semibold text-emerald-900 mb-1">
-            AI feedback (visible only to you)
-          </h3>
-          {aiFeedback.score !== null && (
-            <p className="text-[11px] text-emerald-700 mb-1">
-              Score: {aiFeedback.score}/100 • {aiFeedback.model}
-            </p>
+            <div className="bg-slate-100 rounded-md p-3 flex justify-center">
+              <div className="bg-white shadow-sm border border-slate-200 w-full max-w-full overflow-hidden rounded-md relative flex-1">
+                {/* Status bar showing if there are pending changes */}
+                {localSuggestions.filter(
+                  (s) => s.status === "pending"
+                ).length > 0 && (
+                  <div className="bg-amber-50 border-b border-amber-200 px-3 py-2 text-[10px] text-amber-700">
+                    ⏳{" "}
+                    {
+                      localSuggestions.filter(
+                        (s) => s.status === "pending"
+                      ).length
+                    }{" "}
+                    pending suggestion(s) – accept or dismiss to apply
+                    changes
+                  </div>
+                )}
+
+                {/* Highlight layer - renders text with blue highlights */}
+                <div 
+                  ref={highlightLayerRef}
+                  className="absolute inset-0 pointer-events-none overflow-y-auto p-4 text-xs leading-relaxed font-mono whitespace-pre-wrap break-words text-transparent"
+                >
+                  {(() => {
+                    if (highlightedRanges.length === 0) return editorContent;
+                    
+                    const sortedRanges = [...highlightedRanges].sort((a, b) => a.start - b.start);
+                    const parts = [];
+                    let lastEnd = 0;
+                    
+                    sortedRanges.forEach((range) => {
+                      // Add text before highlight
+                      if (lastEnd < range.start) {
+                        parts.push({
+                          text: editorContent.substring(lastEnd, range.start),
+                          highlight: false,
+                        });
+                      }
+                      // Add highlighted text
+                      parts.push({
+                        text: editorContent.substring(range.start, range.end),
+                        highlight: true,
+                      });
+                      lastEnd = range.end;
+                    });
+                    
+                    // Add remaining text
+                    if (lastEnd < editorContent.length) {
+                      parts.push({
+                        text: editorContent.substring(lastEnd),
+                        highlight: false,
+                      });
+                    }
+                    
+                    return parts.map((part, idx) =>
+                      part.highlight ? (
+                        <span key={idx} className="bg-blue-300/50">{part.text}</span>
+                      ) : (
+                        <span key={idx}>{part.text}</span>
+                      )
+                    );
+                  })()}
+                </div>
+
+                <textarea
+                  ref={textareaRef}
+                  className="w-full h-[700px] p-4 text-xs leading-relaxed resize-none border-none outline-none font-mono bg-white relative z-10"
+                  value={editorContent}
+                  onChange={(e) => setEditorContent(e.target.value)}
+                  readOnly={!isOwner}
+                  spellCheck={false}
+                />
+              </div>
+            </div>
+
+            {isOwner && (
+              <div className="flex justify-end">
+                <button
+                  onClick={handleSaveAsNewVersion}
+                  className="text-[11px] px-3 py-1.5 rounded-full bg-slate-900 text-white hover:bg-slate-800"
+                >
+                  Save as new resume version
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* AI suggestions side panel */}
+          <aside className="w-full md:w-[260px] border border-slate-200 rounded-lg p-3 bg-slate-50 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-slate-900">
+                AI suggestions
+              </h3>
+              {aiFeedback?.score != null && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                  Score {aiFeedback.score}/100
+                </span>
+              )}
+            </div>
+
+            {aiFeedback?.model && (
+              <p className="text-[10px] text-slate-500">
+                Model: {aiFeedback.model}
+              </p>
+            )}
+
+            {localSuggestions.length === 0 ? (
+              <p className="text-[11px] text-slate-500">
+                No structured suggestions yet. You can still use the
+                feedback summary below to edit your resume.
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {localSuggestions.map((s) => {
+                  let statusBadgeClass = "";
+                  let statusLabel = "";
+
+                  if (s.status === "accepted") {
+                    statusBadgeClass =
+                      "bg-emerald-100 text-emerald-700";
+                    statusLabel = "✓ Applied";
+                  } else if (s.status === "rejected") {
+                    statusBadgeClass = "bg-slate-200 text-slate-700";
+                    statusLabel = "Dismissed";
+                  } else {
+                    statusBadgeClass =
+                      "bg-amber-100 text-amber-700";
+                    statusLabel = "Pending";
+                  }
+
+                  return (
+                    <div
+                      key={s.id}
+                      className={`border rounded-md p-2 transition-all ${
+                        s.status === "accepted"
+                          ? "border-emerald-300 bg-emerald-50"
+                          : s.status === "rejected"
+                          ? "border-slate-200 bg-slate-50"
+                          : "border-slate-200 bg-white"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <div className="flex-1">
+                          <p className="text-[11px] font-semibold text-slate-900">
+                            {s.category && (
+                              <span className="text-[9px] px-1 py-0.5 rounded bg-slate-100 text-slate-600 mr-1">
+                                {s.category}
+                              </span>
+                            )}
+                            {s.type}
+                          </p>
+                          <p className="text-[10px] text-slate-600 mt-0.5">
+                            {s.note}
+                          </p>
+                        </div>
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 rounded-full whitespace-nowrap font-semibold ${statusBadgeClass}`}
+                        >
+                          {statusLabel}
+                        </span>
+                      </div>
+
+                      {/* Show before/after for editable changes */}
+                      {(s.type === "rewrite" ||
+                        s.type === "replace" ||
+                        s.type === "remove" ||
+                        s.type === "add") && (
+                        <div className="space-y-1 mb-2 text-[10px]">
+                          {s.original && (
+                            <div
+                              className={`border rounded p-1.5 ${
+                                s.changeApplied
+                                  ? "bg-emerald-50 border-emerald-200"
+                                  : "bg-rose-50 border-rose-200"
+                              }`}
+                            >
+                              <p
+                                className={`font-semibold text-[9px] ${
+                                  s.changeApplied
+                                    ? "text-emerald-700"
+                                    : "text-rose-700"
+                                }`}
+                              >
+                                {s.changeApplied
+                                  ? "✓ Found & Replaced:"
+                                  : "Original:"}
+                              </p>
+                              <p className="text-rose-600 text-[9px] line-through">
+                                {s.original}
+                              </p>
+                            </div>
+                          )}
+                          {s.suggested && (
+                            <div className="bg-emerald-50 border border-emerald-200 rounded p-1.5">
+                              <p className="text-emerald-700 font-semibold text-[9px]">
+                                Suggested:
+                              </p>
+                              <p className="text-emerald-700 text-[9px] font-medium">
+                                {s.suggested}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Show buttons only if pending */}
+                      {s.status === "pending" && (
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleAcceptSuggestion(s)
+                            }
+                            className="flex-1 text-[10px] px-2 py-1 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition font-semibold"
+                          >
+                            ✓ Accept
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleRejectSuggestion(s.id)
+                            }
+                            className="flex-1 text-[10px] px-2 py-1 rounded-full bg-slate-300 text-slate-800 hover:bg-slate-400 transition font-semibold"
+                          >
+                            ✕ Dismiss
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Show checkmark badge for accepted */}
+                      {s.status === "accepted" && (
+                        <div className="flex items-center justify-center pt-1">
+                          <span className="text-[9px] text-emerald-700 font-semibold">
+                            ✓ Applied to resume
+                          </span>
+                        </div>
+                      )}
+
+                      {s.status === "rejected" && (
+                        <div className="flex items-center justify-center pt-1">
+                          <span className="text-[9px] text-slate-600 font-semibold">
+                            Dismissed
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Feedback summary section */}
+            {feedbackSummary && (
+              <div className="mt-2 border-t border-slate-200 pt-2">
+                <p className="text-[10px] font-semibold text-slate-700 mb-1">
+                  Summary
+                </p>
+                <p className="text-[10px] text-slate-600 mb-1">
+                  {feedbackSummary.overall}
+                </p>
+                {feedbackSummary.strengths?.length > 0 && (
+                  <div className="mb-1">
+                    <p className="text-[9px] font-semibold text-emerald-700">
+                      Strengths:
+                    </p>
+                    <ul className="text-[9px] text-slate-600 ml-2 list-disc">
+                      {feedbackSummary.strengths
+                        .slice(0, 2)
+                        .map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
+                {feedbackSummary.weaknesses?.length > 0 && (
+                  <div>
+                    <p className="text-[9px] font-semibold text-rose-700">
+                      Areas to improve:
+                    </p>
+                    <ul className="text-[9px] text-slate-600 ml-2 list-disc">
+                      {feedbackSummary.weaknesses
+                        .slice(0, 2)
+                        .map((w, i) => (
+                          <li key={i}>{w}</li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </aside>
+        </div>
+      ) : (
+        // no AI panel (either not requested or user not allowed)
+        <div className="flex flex-col gap-2">
+          <div className="text-xs text-slate-500 flex items-center justify-between">
+            <span>Resume preview</span>
+            {isOwner ? (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+                You can edit this during review
+              </span>
+            ) : (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-100">
+                Read-only for you
+              </span>
+            )}
+          </div>
+
+          <div className="bg-slate-100 rounded-md p-3 flex justify-center">
+            <div className="bg-white shadow-sm border border-slate-200 w-full max-w-[720px] h-[340px] overflow-y-auto rounded-md">
+              <textarea
+                className="w-full h-full p-4 text-xs leading-relaxed resize-none border-none outline-none"
+                value={editorContent}
+                onChange={(e) => setEditorContent(e.target.value)}
+                readOnly={!isOwner}
+                spellCheck={false}
+              />
+            </div>
+          </div>
+
+          {isOwner && (
+            <div className="flex justify-end">
+              <button
+                onClick={handleSaveAsNewVersion}
+                className="text-[11px] px-3 py-1.5 rounded-full bg-slate-900 text-white hover:bg-slate-800"
+              >
+                Save as new resume version
+              </button>
+            </div>
           )}
-          <p className="text-xs text-emerald-900 whitespace-pre-wrap">
-            {aiFeedback.feedback_text}
-          </p>
         </div>
       )}
 
@@ -1053,7 +1734,9 @@ function DetailView(props) {
                 <select
                   className="border border-slate-300 rounded px-2 py-1 text-xs"
                   value={reviewRating}
-                  onChange={(e) => setReviewRating(Number(e.target.value))}
+                  onChange={(e) =>
+                    setReviewRating(Number(e.target.value))
+                  }
                 >
                   <option value={5}>5 - Excellent</option>
                   <option value={4}>4 - Strong</option>
@@ -1116,9 +1799,12 @@ function DetailView(props) {
               comments={commentsByReview[rev.review_id] || []}
               commentsLoading={commentsLoading}
               canComment={canCommentOnReview(rev)}
-              commentDraft={expandedReviewId === rev.review_id ? commentDraft : ""}
+              commentDraft={
+                expandedReviewId === rev.review_id ? commentDraft : ""
+              }
               setCommentDraft={(val) =>
-                expandedReviewId === rev.review_id && setCommentDraft(val)
+                expandedReviewId === rev.review_id &&
+                setCommentDraft(val)
               }
               commentSubmitting={commentSubmitting}
               onSubmitComment={onSubmitComment}
@@ -1182,7 +1868,9 @@ function ReviewItem({
               Loading comments…
             </p>
           ) : comments.length === 0 ? (
-            <p className="text-[11px] text-slate-500">No comments yet.</p>
+            <p className="text-[11px] text-slate-500">
+              No comments yet.
+            </p>
           ) : (
             <ul className="space-y-1">
               {comments.map((c) => (

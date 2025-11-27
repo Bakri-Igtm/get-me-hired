@@ -223,19 +223,8 @@ export const upsertAiFeedback = async (req, res) => {
   }
 };
 
-// 2) AUTO-GENERATE endpoint: call AI model, then save
-export const generateAiFeedback = async (req, res) => {
-  const { resumeVersionsId, model } = req.body;
-  const { userId } = req.user;
-
-  if (!resumeVersionsId) {
-    return res.status(400).json({
-      message: "resumeVersionsId is required",
-    });
-  }
-
-  const chosenModel = model || "gpt-4.1-mini"; // or whatever model you plan to use
-
+// 2) HELPER: Generate AI feedback (internal, non-blocking use)
+export async function generateAiFeedbackAsync(resumeVersionsId) {
   try {
     // Look up resume text
     const [rows] = await pool.query(
@@ -252,16 +241,16 @@ export const generateAiFeedback = async (req, res) => {
     );
 
     if (rows.length === 0) {
-      return res.status(404).json({ message: "Resume version not found" });
+      throw new Error("Resume version not found");
     }
 
     const resumeText = rows[0].content || "";
 
     if (!resumeText || resumeText.trim().length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Resume version has no content to analyze." });
+      throw new Error("Resume version has no content to analyze.");
     }
+
+    const chosenModel = "gpt-4o-mini";
 
     // Call OpenAI with system prompt + resume text
     const completion = await openai.chat.completions.create({
@@ -281,9 +270,7 @@ export const generateAiFeedback = async (req, res) => {
 
     const content = completion.choices[0]?.message?.content;
     if (!content) {
-      return res
-        .status(500)
-        .json({ message: "AI did not return any content." });
+      throw new Error("AI did not return any content.");
     }
 
     let feedback;
@@ -291,28 +278,72 @@ export const generateAiFeedback = async (req, res) => {
       feedback = JSON.parse(content);
     } catch (err) {
       console.error("Failed to parse AI JSON:", content);
-      return res.status(500).json({
-        message: "AI returned invalid JSON.",
-      });
+      throw new Error("AI returned invalid JSON.");
     }
 
-    // Save in DB
-    const aiFeedbackId = await saveAiFeedback({
-      resumeVersionsId,
-      model: chosenModel,
-      feedback,
-      userId,
-    });
+    // Save directly to DB
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
 
+      const [existingRows] = await conn.query(
+        `SELECT ai_feedback_id 
+         FROM ai_feedback 
+         WHERE resume_versions_id = ?`,
+        [resumeVersionsId]
+      );
+
+      const feedbackText = JSON.stringify(feedback);
+      const finalScore = feedback?.summary?.score || null;
+
+      if (existingRows.length > 0) {
+        await conn.query(
+          `UPDATE ai_feedback
+           SET model = ?, feedback_text = ?, score = ?, created_at = NOW()
+           WHERE resume_versions_id = ?`,
+          [chosenModel, feedbackText, finalScore, resumeVersionsId]
+        );
+      } else {
+        await conn.query(
+          `INSERT INTO ai_feedback (resume_versions_id, model, feedback_text, score)
+           VALUES (?, ?, ?, ?)`,
+          [resumeVersionsId, chosenModel, feedbackText, finalScore]
+        );
+      }
+
+      await conn.commit();
+      console.log(`✓ AI feedback generated for resume ${resumeVersionsId}`);
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    console.error(
+      `✗ AI feedback generation failed for resume ${resumeVersionsId}:`,
+      err.message
+    );
+    throw err;
+  }
+}
+
+// 2B) AUTO-GENERATE endpoint: call AI model via helper, then save
+export const generateAiFeedback = async (req, res) => {
+  const { resumeVersionsId, model } = req.body;
+  const { userId } = req.user;
+
+  if (!resumeVersionsId) {
+    return res.status(400).json({
+      message: "resumeVersionsId is required",
+    });
+  }
+
+  try {
+    await generateAiFeedbackAsync(resumeVersionsId);
     return res.status(201).json({
-      ai_feedback_id: aiFeedbackId,
-      model: chosenModel,
-      feedback,
       message: "AI feedback generated and saved successfully",
     });
   } catch (err) {
     console.error("Error generating AI feedback:", err);
-    return res.status(500).json({ message: "Error generating AI feedback" });
+    return res.status(500).json({ message: err.message || "Error generating AI feedback" });
   }
 };
 

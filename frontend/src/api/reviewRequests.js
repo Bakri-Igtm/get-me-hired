@@ -24,6 +24,7 @@ export const createReviewRequest = ({
   visibility,
   track,
   requestNote,
+  aiRequested,
 }) =>
   api.post("/api/review-requests", {
     resumeVersionsId,
@@ -31,6 +32,7 @@ export const createReviewRequest = ({
     visibility,
     track,
     requestNote,
+    aiRequested
   });
 
 // accept / decline a request

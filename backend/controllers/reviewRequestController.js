@@ -1,5 +1,6 @@
 // controllers/reviewRequestController.js
 import pool from "../db.js";
+import { generateAiFeedbackAsync } from "./aiFeedbackController.js";
 
 /**
  * POST /api/review-requests
@@ -14,6 +15,7 @@ export const createReviewRequest = async (req, res) => {
     visibility,   // 'public' | 'private' (from frontend)
     track,
     requestNote,
+    aiRequested,  // 🔹 NEW
   } = req.body;
 
   const requesterId = req.user.userId;
@@ -33,9 +35,6 @@ export const createReviewRequest = async (req, res) => {
   } else if (rawVisibility === "private") {
     vis = "private";
   } else {
-    // If visibility isn't explicitly set:
-    // - If there's a reviewerId, treat as private.
-    // - If there's no reviewerId, treat as public.
     vis = reviewerId ? "private" : "public";
   }
 
@@ -45,6 +44,9 @@ export const createReviewRequest = async (req, res) => {
       .status(400)
       .json({ message: "reviewerId is required for private requests" });
   }
+
+  // normalize aiRequested to 0/1
+  const aiFlag = aiRequested ? 1 : 0;
 
   try {
     // Make sure version exists
@@ -70,18 +72,29 @@ export const createReviewRequest = async (req, res) => {
     const [result] = await pool.query(
       `
       INSERT INTO review_request
-        (resume_versions_id, requester_id, reviewer_id, visibility, track, request_note)
-      VALUES (?, ?, ?, ?, ?, ?)
+        (resume_versions_id, requester_id, reviewer_id, visibility, track, request_note, ai_requested)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       `,
       [
         resumeVersionsId,
         requesterId,
-        vis === "private" ? reviewerId : null, // 🔑 null for public
+        vis === "private" ? reviewerId : null,
         vis,
         track || null,
         requestNote || null,
+        aiFlag,                     // 🔹 NEW
       ]
     );
+
+    // 🔹 TRIGGER AI FEEDBACK GENERATION ASYNCHRONOUSLY (non-blocking)
+    if (aiFlag) {
+      generateAiFeedbackAsync(resumeVersionsId).catch((err) => {
+        console.error(
+          `AI feedback generation failed for resume ${resumeVersionsId}:`,
+          err.message
+        );
+      });
+    }
 
     return res.status(201).json({
       request_id: result.insertId,
@@ -94,6 +107,7 @@ export const createReviewRequest = async (req, res) => {
       .json({ message: "Error creating review request" });
   }
 };
+
 
 /**
  * GET /api/review-requests/incoming
@@ -318,7 +332,6 @@ export const getReviewRequestDetail = async (req, res) => {
       return res.status(400).json({ message: "Invalid request id" });
     }
 
-    // Base request + requester + (optional) reviewer + resume version/content
     const [rows] = await pool.query(
       `
       SELECT
@@ -331,6 +344,7 @@ export const getReviewRequestDetail = async (req, res) => {
         rr.created_at,
         rr.visibility,
         rr.track,
+        rr.ai_requested,  -- 🔹 NEW
 
         req.user_fname  AS requesterFirstName,
         req.user_lname  AS requesterLastName,
@@ -345,7 +359,7 @@ export const getReviewRequestDetail = async (req, res) => {
         r.track         AS resumeTrack
       FROM review_request rr
       JOIN users req ON req.user_id = rr.requester_id
-      LEFT JOIN users rev ON rev.user_id = rr.reviewer_id  -- 🔑 LEFT JOIN for public (no reviewer)
+      LEFT JOIN users rev ON rev.user_id = rr.reviewer_id
       JOIN resume_versions rv ON rv.resume_versions_id = rr.resume_versions_id
       JOIN resume r ON r.resume_id = rv.resume_id
       WHERE rr.request_id = ?
@@ -359,47 +373,43 @@ export const getReviewRequestDetail = async (req, res) => {
 
     const base = rows[0];
 
-    // Authorization + who can review
     const isRequester = userId === base.requester_id;
     let isReviewer = false;
 
-    // private: only the invited reviewer can review
     if (base.visibility === "private") {
       isReviewer = base.reviewer_id === userId;
-    }
-    // public: anyone except the requester can review
-    else if (base.visibility === "public") {
+    } else if (base.visibility === "public") {
       isReviewer = base.requester_id !== userId;
     }
 
     const isAdmin = myType === "AD";
 
-    // If you want to block totally random users from seeing it,
-    // keep this check. For public, isReviewer is true for everyone
-    // except the requester, so they can see.
     if (!isRequester && !isReviewer && !isAdmin) {
       return res
         .status(403)
         .json({ message: "Not allowed to view this request" });
     }
 
-    // AI feedback for this resume version
-    const [aiRows] = await pool.query(
-      `
-      SELECT
-        ai_feedback_id,
-        model,
-        feedback_text,
-        score,
-        created_at
-      FROM ai_feedback
-      WHERE resume_versions_id = ?
-      `,
-      [base.resume_versions_id]
-    );
-    const aiFeedback = aiRows[0] || null;
+    // 🔹 Only fetch AI feedback if it was requested
+    let aiFeedback = null;
+    if (base.ai_requested) {
+      const [aiRows] = await pool.query(
+        `
+        SELECT
+          ai_feedback_id,
+          model,
+          feedback_text,
+          score,
+          created_at
+        FROM ai_feedback
+        WHERE resume_versions_id = ?
+        `,
+        [base.resume_versions_id]
+      );
+      aiFeedback = aiRows[0] || null;
+    }
 
-    // Human reviews for this version
+    // Human reviews unchanged...
     const [reviewRows] = await pool.query(
       `
       SELECT
@@ -418,7 +428,6 @@ export const getReviewRequestDetail = async (req, res) => {
       [base.resume_versions_id]
     );
 
-    // For each review, count comments
     const reviewIds = reviewRows.map((r) => r.review_id);
     let commentsCountByReview = {};
     if (reviewIds.length) {
@@ -441,11 +450,15 @@ export const getReviewRequestDetail = async (req, res) => {
       commentCount: commentsCountByReview[r.review_id] || 0,
     }));
 
+    // 🔹 AI visibility: only requester (and optionally admin)
+    const canSeeAiFeedback =
+      !!base.ai_requested && (isRequester || isAdmin);
+
     return res.json({
-      request: base,
+      request: base,        // includes ai_requested
       aiFeedback,
       reviews: reviewsWithCounts,
-      canSeeAiFeedback: isRequester || isAdmin,
+      canSeeAiFeedback,
       isRequester,
       isReviewer,
       isAdmin,
@@ -458,210 +471,193 @@ export const getReviewRequestDetail = async (req, res) => {
   }
 };
 
+/**
+ * PUT /api/review-requests/:id/resume-version
+ * Update which resume_versions_id the review request is pointing to
+ * Body: { resumeVersionsId }
+ * Only the requester can update this
+ */
+export const updateReviewRequestVersion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { resumeVersionsId } = req.body;
+    const userId = req.user.userId;
 
-// import pool from "../db.js";
+    if (!id || !resumeVersionsId) {
+      return res.status(400).json({ message: "id and resumeVersionsId are required" });
+    }
 
-// export const createReviewRequest = async (req, res) => {
-//   const { resumeVersionsId, reviewerId, requestNote, visibility, isPublic } =
-//     req.body;
-//   const requesterId = req.user.userId;
+    // Verify the user is the requester
+    const [requestRows] = await pool.query(
+      `SELECT requester_id, request_id FROM review_request WHERE request_id = ?`,
+      [id]
+    );
 
-//   if (!resumeVersionsId) {
-//     return res
-//       .status(400)
-//       .json({ message: "resumeVersionsId is required" });
-//   }
+    if (requestRows.length === 0) {
+      return res.status(404).json({ message: "Review request not found" });
+    }
 
-//   // 1) Determine visibility
-//   let finalVisibility = "direct";
-//   if (visibility === "public" || isPublic === true) {
-//     finalVisibility = "public";
-//   }
+    if (requestRows[0].requester_id !== userId) {
+      return res.status(403).json({ message: "Only the requester can update this" });
+    }
 
-//   // 2) For direct requests, reviewerId is required
-//   if (finalVisibility === "direct" && !reviewerId) {
-//     return res
-//       .status(400)
-//       .json({ message: "reviewerId is required for direct requests" });
-//   }
+    // Verify the new resume version exists
+    const [vRows] = await pool.query(
+      `SELECT resume_versions_id FROM resume_versions WHERE resume_versions_id = ?`,
+      [resumeVersionsId]
+    );
 
-//   // For public, reviewerId can be null
-//   const finalReviewerId = finalVisibility === "public" ? null : reviewerId;
+    if (vRows.length === 0) {
+      return res.status(404).json({ message: "Resume version not found" });
+    }
 
-//   const conn = await pool.getConnection();
-//   try {
-//     await conn.beginTransaction();
+    // Update the review_request
+    await pool.query(
+      `UPDATE review_request SET resume_versions_id = ? WHERE request_id = ?`,
+      [resumeVersionsId, id]
+    );
 
-//     // Ensure resume version exists
-//     const [rvRows] = await conn.query(
-//       `SELECT resume_versions_id FROM resume_versions WHERE resume_versions_id = ?`,
-//       [resumeVersionsId]
-//     );
-//     if (rvRows.length === 0) {
-//       await conn.rollback();
-//       return res
-//         .status(404)
-//         .json({ message: "Resume version not found" });
-//     }
+    return res.status(200).json({
+      message: "Review request resume version updated successfully",
+      request_id: id,
+      resume_versions_id: resumeVersionsId,
+    });
+  } catch (err) {
+    console.error("Error updating review request version:", err);
+    return res.status(500).json({ message: "Error updating review request version" });
+  }
+};
 
-//     // Insert review request
-//     const [result] = await conn.query(
-//       `INSERT INTO review_request 
-//         (resume_versions_id, requester_id, reviewer_id, request_note, visibility)
-//        VALUES (?, ?, ?, ?, ?)`,
-//       [
-//         resumeVersionsId,
-//         requesterId,
-//         finalReviewerId,
-//         requestNote || null,
-//         finalVisibility,
-//       ]
-//     );
+export const updateAiSuggestionStatus = async (req, res) => {
+  try {
+    const { id } = req.params; // review_request.request_id
+    const { suggestionId, status } = req.body;
+    const requestId = Number(id);
+    const userId = req.user.userId;
+    const userType = req.user.userType; // 'RQ' | 'RR' | 'AD' etc.
 
-//     await conn.commit();
+    if (!requestId || !suggestionId) {
+      return res
+        .status(400)
+        .json({ message: "requestId and suggestionId are required" });
+    }
 
-//     return res.status(201).json({
-//       request_id: result.insertId,
-//       visibility: finalVisibility,
-//       message:
-//         finalVisibility === "public"
-//           ? "Public review request created"
-//           : "Direct review request created",
-//     });
-//   } catch (err) {
-//     await conn.rollback();
-//     console.error("Error creating review request:", err);
+    if (!["accepted", "rejected", "pending"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status value" });
+    }
 
-//     if (err.code === "ER_DUP_ENTRY") {
-//       return res.status(409).json({
-//         message: "Request already exists for this reviewer/version",
-//       });
-//     }
+    // 1) Load the review_request to check permissions + find resume_versions_id
+    const [reqRows] = await pool.query(
+      `
+      SELECT
+        rr.request_id,
+        rr.requester_id,
+        rr.resume_versions_id,
+        rr.ai_requested
+      FROM review_request rr
+      WHERE rr.request_id = ?
+      `,
+      [requestId]
+    );
 
-//     // optional: log specific null/foreign key errors more nicely later
-//     return res.status(500).json({ message: "Error creating review request" });
-//   } finally {
-//     conn.release();
-//   }
-// };
+    if (reqRows.length === 0) {
+      return res.status(404).json({ message: "Review request not found" });
+    }
 
+    const reqRow = reqRows[0];
 
+    // Only requester or admin can update AI suggestions
+    const isRequester = reqRow.requester_id === userId;
+    const isAdmin = userType === "AD";
 
-// // GET /api/review-requests/incoming
-// export const getIncomingRequests = async (req, res) => {
-//   const userId = req.user.userId;
+    if (!isRequester && !isAdmin) {
+      return res
+        .status(403)
+        .json({ message: "Not allowed to update AI suggestions" });
+    }
 
-//   try {
-//     const [rows] = await pool.query(
-//       `
-//       SELECT 
-//         rr.request_id,
-//         rr.resume_versions_id,
-//         rr.status,
-//         rr.created_at,
-//         rr.responded_at,
-//         rr.request_note,
-//         u.user_id AS requester_id,
-//         u.user_fname AS requester_fname,
-//         u.user_lname AS requester_lname
-//       FROM review_request rr
-//       JOIN users u ON rr.requester_id = u.user_id
-//       WHERE rr.reviewer_id = ?
-//       ORDER BY rr.created_at DESC
-//       `,
-//       [userId]
-//     );
+    if (!reqRow.ai_requested) {
+      return res
+        .status(400)
+        .json({ message: "AI feedback was not requested for this review" });
+    }
 
-//     return res.json(rows);
-//   } catch (err) {
-//     console.error("Error fetching incoming requests:", err);
-//     return res.status(500).json({ message: "Error fetching incoming requests" });
-//   }
-// };
+    // 2) Load the ai_feedback for this resume version
+    const [aiRows] = await pool.query(
+      `
+      SELECT
+        ai_feedback_id,
+        feedback_text
+      FROM ai_feedback
+      WHERE resume_versions_id = ?
+      `,
+      [reqRow.resume_versions_id]
+    );
 
-// // GET /api/review-requests/outgoing
-// export const getOutgoingRequests = async (req, res) => {
-//   const userId = req.user.userId;
+    if (aiRows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "AI feedback not found for this request" });
+    }
 
-//   try {
-//     const [rows] = await pool.query(
-//       `
-//       SELECT 
-//         rr.request_id,
-//         rr.resume_versions_id,
-//         rr.status,
-//         rr.created_at,
-//         rr.responded_at,
-//         rr.request_note,
-//         u.user_id AS reviewer_id,
-//         u.user_fname AS reviewer_fname,
-//         u.user_lname AS reviewer_lname
-//       FROM review_request rr
-//       JOIN users u ON rr.reviewer_id = u.user_id
-//       WHERE rr.requester_id = ?
-//       ORDER BY rr.created_at DESC
-//       `,
-//       [userId]
-//     );
+    const aiRow = aiRows[0];
 
-//     return res.json(rows);
-//   } catch (err) {
-//     console.error("Error fetching outgoing requests:", err);
-//     return res.status(500).json({ message: "Error fetching outgoing requests" });
-//   }
-// };
+    // 3) Parse the JSON, update the matching suggestion's status
+    let json;
+    try {
+      json = JSON.parse(aiRow.feedback_text || "{}");
+    } catch (err) {
+      console.error("Failed to parse ai_feedback.feedback_text:", err);
+      return res
+        .status(500)
+        .json({ message: "Stored AI feedback is invalid JSON" });
+    }
 
-// // POST /api/review-requests/:id/respond
-// export const respondToReviewRequest = async (req, res) => {
-//   const { id } = req.params;
-//   const { status } = req.body;
-//   const userId = req.user.userId;
+    if (!Array.isArray(json.suggestions)) {
+      return res
+        .status(400)
+        .json({ message: "AI feedback has no suggestions array" });
+    }
 
-//   // Only allow certain status values
-//   const allowedStatuses = ["accepted", "declined"];
-//   if (!allowedStatuses.includes(status)) {
-//     return res.status(400).json({ message: "Invalid status" });
-//   }
+    let found = false;
+    json.suggestions = json.suggestions.map((s) => {
+      if (String(s.id) === String(suggestionId)) {
+        found = true;
+        return {
+          ...s,
+          status, // overwrite
+        };
+      }
+      return s;
+    });
 
-//   const conn = await pool.getConnection();
-//   try {
-//     await conn.beginTransaction();
+    if (!found) {
+      return res
+        .status(404)
+        .json({ message: "Suggestion with that id not found" });
+    }
 
-//     // ensure this request exists and belongs to this reviewer
-//     const [rows] = await conn.query(
-//       `SELECT request_id, reviewer_id, status FROM review_request WHERE request_id = ?`,
-//       [id]
-//     );
+    // 4) Save updated JSON back to ai_feedback
+    const updatedText = JSON.stringify(json);
 
-//     if (rows.length === 0) {
-//       await conn.rollback();
-//       return res.status(404).json({ message: "Review request not found" });
-//     }
+    await pool.query(
+      `
+      UPDATE ai_feedback
+      SET feedback_text = ?
+      WHERE ai_feedback_id = ?
+      `,
+      [updatedText, aiRow.ai_feedback_id]
+    );
 
-//     const request = rows[0];
-//     if (request.reviewer_id !== userId) {
-//       await conn.rollback();
-//       return res
-//         .status(403)
-//         .json({ message: "You are not the reviewer for this request" });
-//     }
-
-//     // update status & responded_at
-//     await conn.query(
-//       `UPDATE review_request 
-//        SET status = ?, responded_at = NOW()
-//        WHERE request_id = ?`,
-//       [status, id]
-//     );
-
-//     await conn.commit();
-
-//     return res.json({ message: `Request ${status}` });
-//   } catch (err) {
-//     await conn.rollback();
-//     console.error("Error responding to review request:", err);
-//     return res.status(500).json({ message: "Error responding to request" });
-//   } finally {
-//     conn.release();
-//   }
-// };
+    return res.json({
+      message: "AI suggestion status updated",
+      suggestionId,
+      status,
+    });
+  } catch (err) {
+    console.error("updateAiSuggestionStatus error:", err);
+    return res
+      .status(500)
+      .json({ message: "Error updating AI suggestion status" });
+  }
+};
