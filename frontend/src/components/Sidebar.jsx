@@ -1,12 +1,21 @@
 // src/components/Sidebar.jsx
 import { NavLink } from "react-router-dom";
-import { Home, Users, Trophy, User, ClipboardList } from "lucide-react";
+import {
+  Home,
+  Users,
+  Trophy,
+  User,
+  ClipboardList,
+  FileText,
+} from "lucide-react";
 
 export default function Sidebar({ onNavigate }) {
   const menuItems = [
     { name: "Home", icon: Home, path: "/dashboard" },
     { name: "Directory", icon: Users, path: "/directory" },
-    { name: "Review Requests", icon: ClipboardList, path: "/review-requests" }, // ✅ new
+    { name: "Review Requests", icon: ClipboardList, path: "/review-requests" },
+    // ✅ New "My Resumes" item, before Profile
+    { name: "My Resumes", icon: FileText, path: "/my-resumes" },
     { name: "Prizes", icon: Trophy, path: "/prizes" },
     { name: "Profile", icon: User, path: "/profile" },
   ];
@@ -14,9 +23,6 @@ export default function Sidebar({ onNavigate }) {
   return (
     <div className="h-full w-56 bg-white text-slate-900 flex flex-col justify-between border border-slate-200 shadow-sm rounded-lg md:rounded-md">
       <div className="flex flex-col py-6 px-3 space-y-2 flex-grow">
-        {/* <h1 className="text-lg font-bold text-emerald-600 px-2 mb-4">
-          GetMeHired
-        </h1> */}
         {menuItems.map((item) => {
           const Icon = item.icon;
           return (

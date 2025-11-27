@@ -12,6 +12,8 @@ import ReviewRequestsPage from "./pages/ReviewRequestsPage.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import PublicMemberPage from "./pages/PublicMemberPage.jsx";
 
+// ✅ NEW: import the MyResumes page
+import MyResumePage from "./pages/MyResumePage.jsx";
 
 function App() {
   const { user, logout, loading } = useAuth();
@@ -19,7 +21,6 @@ function App() {
 
   const toggleSidebar = () => setSidebarOpen((prev) => !prev);
 
-  // 🚦 Don’t render routes until we know if user is logged in
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white text-slate-900">
@@ -40,7 +41,6 @@ function App() {
           }
         >
           <div className="flex items-center gap-3">
-            {/* Hamburger only when logged in */}
             {user && (
               <button
                 className="inline-flex items-center justify-center rounded-md border border-slate-200 w-9 h-9 text-slate-700 hover:bg-slate-100"
@@ -95,19 +95,18 @@ function App() {
             <div className="flex-1">
               <Routes>
                 {/* Root only when URL is exactly "/" */}
-                <Route
-                  index
-                  element={<Navigate to="/dashboard" replace />}
-                />
+                <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/directory" element={<DirectoryPage />} />
                 <Route
                   path="/review-requests"
                   element={<ReviewRequestsPage />}
                 />
+                {/* ✅ NEW ROUTE for My Resumes */}
+                <Route path="/my-resumes" element={<MyResumePage />} />
                 <Route path="/prizes" element={<PrizesPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/members/:id" element={<PublicMemberPage />} /> 
+                <Route path="/members/:id" element={<PublicMemberPage />} />
                 {/* Any unknown path while logged in → dashboard */}
                 <Route
                   path="*"
@@ -121,18 +120,10 @@ function App() {
           // LOGGED-OUT LAYOUT
           // =======================
           <Routes>
-            {/* Root only when exactly "/" and logged out */}
-            <Route
-              index
-              element={<Navigate to="/login" replace />}
-            />
+            <Route index element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<AuthPage />} />
             <Route path="/signup" element={<AuthPage />} />
-            {/* Any unknown path while logged out → login */}
-            <Route
-              path="*"
-              element={<Navigate to="/login" replace />}
-            />
+            <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         )}
       </main>
