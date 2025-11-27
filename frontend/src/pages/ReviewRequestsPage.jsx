@@ -988,6 +988,26 @@ function DetailView(props) {
   // Track highlighted ranges for accepted suggestions
   const [highlightedRanges, setHighlightedRanges] = useState([]);
 
+  // helper: find ranges of suggested text using regex/fuzzy whitespace
+  const findSuggestionRanges = (content, suggested) => {
+    if (!suggested) return [];
+
+    const normalizedSuggested = suggested.replace(/\s+/g, " ").trim();
+    const escaped = normalizedSuggested.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const flexiblePattern = escaped.replace(/\s+/g, "\\s+");
+    const regex = new RegExp(flexiblePattern, "gi");
+
+    const ranges = [];
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+      ranges.push({
+        start: match.index,
+        end: match.index + match[0].length,
+      });
+    }
+    return ranges;
+  };
+
   // Sync scroll between textarea and highlight layer
   useEffect(() => {
     const handleScroll = () => {
@@ -1182,15 +1202,22 @@ function DetailView(props) {
     // Update editor content locally
     setEditorContent(updatedContent);
 
-    // Track highlighted range for the new text
+    // Regex-based highlight for the newly applied suggestion, auto-clear after 3s
     if (changeApplied && suggested) {
-      const startPos = updatedContent.indexOf(suggested);
-      if (startPos !== -1) {
-        const endPos = startPos + suggested.length;
-        setHighlightedRanges((prev) => [
-          ...prev,
-          { id, start: startPos, end: endPos },
-        ]);
+      const newRanges = findSuggestionRanges(updatedContent, suggested).map(
+        (r) => ({ id, ...r })
+      );
+
+      if (newRanges.length > 0) {
+        // Add highlight immediately
+        setHighlightedRanges((prev) => [...prev, ...newRanges]);
+
+        // Remove highlight for this suggestion after 3 seconds
+        setTimeout(() => {
+          setHighlightedRanges((prev) =>
+            prev.filter((range) => range.id !== id)
+          );
+        }, 3000);
       }
     }
 
@@ -1235,7 +1262,7 @@ function DetailView(props) {
         )
       );
 
-      // Remove highlight for rejected suggestion
+      // Remove highlight for rejected suggestion, if any
       setHighlightedRanges((prev) =>
         prev.filter((range) => range.id !== id)
       );
@@ -1394,33 +1421,42 @@ function DetailView(props) {
                 )}
 
                 {/* Highlight layer - renders text with blue highlights */}
-                <div 
+                <div
                   ref={highlightLayerRef}
-                  className="absolute inset-0 pointer-events-none overflow-y-auto p-4 text-xs leading-relaxed font-mono whitespace-pre-wrap break-words text-transparent"
+                  className="absolute inset-0 z-0 pointer-events-none overflow-y-auto p-4 text-xs leading-relaxed font-mono whitespace-pre-wrap break-words text-transparent"
                 >
                   {(() => {
-                    if (highlightedRanges.length === 0) return editorContent;
-                    
-                    const sortedRanges = [...highlightedRanges].sort((a, b) => a.start - b.start);
+                    if (highlightedRanges.length === 0)
+                      return editorContent;
+
+                    const sortedRanges = [...highlightedRanges].sort(
+                      (a, b) => a.start - b.start
+                    );
                     const parts = [];
                     let lastEnd = 0;
-                    
+
                     sortedRanges.forEach((range) => {
                       // Add text before highlight
                       if (lastEnd < range.start) {
                         parts.push({
-                          text: editorContent.substring(lastEnd, range.start),
+                          text: editorContent.substring(
+                            lastEnd,
+                            range.start
+                          ),
                           highlight: false,
                         });
                       }
                       // Add highlighted text
                       parts.push({
-                        text: editorContent.substring(range.start, range.end),
+                        text: editorContent.substring(
+                          range.start,
+                          range.end
+                        ),
                         highlight: true,
                       });
                       lastEnd = range.end;
                     });
-                    
+
                     // Add remaining text
                     if (lastEnd < editorContent.length) {
                       parts.push({
@@ -1428,10 +1464,15 @@ function DetailView(props) {
                         highlight: false,
                       });
                     }
-                    
+
                     return parts.map((part, idx) =>
                       part.highlight ? (
-                        <span key={idx} className="bg-blue-300/50">{part.text}</span>
+                        <span
+                          key={idx}
+                          className="bg-blue-300/50"
+                        >
+                          {part.text}
+                        </span>
                       ) : (
                         <span key={idx}>{part.text}</span>
                       )
@@ -1439,9 +1480,10 @@ function DetailView(props) {
                   })()}
                 </div>
 
+                {/* Textarea - on top, transparent background */}
                 <textarea
                   ref={textareaRef}
-                  className="w-full h-[700px] p-4 text-xs leading-relaxed resize-none border-none outline-none font-mono bg-white relative z-10"
+                  className="w-full h-[700px] p-4 text-xs leading-relaxed resize-none border-none outline-none font-mono bg-transparent relative z-10"
                   value={editorContent}
                   onChange={(e) => setEditorContent(e.target.value)}
                   readOnly={!isOwner}
