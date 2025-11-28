@@ -90,87 +90,94 @@ function DirectoryPage() {
   return (
     <div className="space-y-6">
       {/* Header + Search + Filters */}
-      <section className="space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
+      <section className="flex flex-col gap-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Left: Title */}
+          <div className="shrink-0">
             <h1 className="text-2xl font-bold text-slate-900">Directory</h1>
             <p className="text-sm text-slate-600">
-              Browse requesters and reviewers on Get Me Hired.
+              Browse requesters and reviewers.
             </p>
           </div>
+
+          {/* Center: Search Bar */}
+          <form onSubmit={handleSearch} className="flex-1 max-w-xl relative mx-auto md:mx-4">
+            <div className="relative">
+              <input
+                type="text"
+                className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                placeholder="Try 'I'm looking for a finance expert...'"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                🔍
+              </span>
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </form>
+
+          {/* Right: Filters */}
+          {!isSearching ? (
+            <div className="flex items-center gap-2 shrink-0">
+              <FilterChip
+                label="All"
+                active={filterRole === "ALL"}
+                onClick={() => setFilterRole("ALL")}
+              />
+              <FilterChip
+                label="Requesters"
+                active={filterRole === "RQ"}
+                onClick={() => setFilterRole("RQ")}
+              />
+              <FilterChip
+                label="Reviewers"
+                active={filterRole === "RR"}
+                onClick={() => setFilterRole("RR")}
+              />
+            </div>
+          ) : (
+             <div className="w-[200px] hidden md:block"></div> 
+          )}
         </div>
-
-        {/* AI Search Bar */}
-        <form onSubmit={handleSearch} className="relative max-w-2xl">
-          <div className="relative">
-            <input
-              type="text"
-              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-              placeholder="Try 'I'm looking for a finance expert to review my resume'..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-              🔍
-            </span>
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={clearSearch}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-          <p className="text-[10px] text-slate-500 mt-1 ml-1">
-            AI-powered search: Describe who you're looking for in natural language.
-          </p>
-        </form>
-
-        {/* Filters (only show if not searching, or maybe keep them to filter search results? 
-            For now, let's hide them during search to avoid confusion as search might override role) 
-        */}
-        {!isSearching && (
-          <div className="flex items-center gap-2">
-            <FilterChip
-              label="All"
-              active={filterRole === "ALL"}
-              onClick={() => setFilterRole("ALL")}
-            />
-            <FilterChip
-              label="Requesters"
-              active={filterRole === "RQ"}
-              onClick={() => setFilterRole("RQ")}
-            />
-            <FilterChip
-              label="Reviewers"
-              active={filterRole === "RR"}
-              onClick={() => setFilterRole("RR")}
-            />
-          </div>
-        )}
         
-        {isSearching && searchMeta && (
-          <div className="flex flex-wrap gap-2 text-xs text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100">
-            <span className="font-semibold">AI Filtered by:</span>
-            {searchMeta.role && (
-              <span className="bg-white px-2 py-0.5 rounded border border-slate-200">
-                Role: {roleLabel(searchMeta.role)}
-              </span>
+        {/* Search Helper Text & Meta */}
+        <div className="flex flex-col items-center gap-2">
+             {!isSearching && (
+                <p className="text-[10px] text-slate-500">
+                    AI-powered search: Describe who you're looking for in natural language.
+                </p>
+             )}
+             
+            {isSearching && searchMeta && (
+            <div className="flex flex-wrap justify-center gap-2 text-xs text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                <span className="font-semibold">AI Filtered by:</span>
+                {searchMeta.role && (
+                <span className="bg-white px-2 py-0.5 rounded border border-slate-200">
+                    Role: {roleLabel(searchMeta.role)}
+                </span>
+                )}
+                {searchMeta.keywords?.map((kw, i) => (
+                <span key={i} className="bg-white px-2 py-0.5 rounded border border-slate-200">
+                    "{kw}"
+                </span>
+                ))}
+                {searchMeta.name && (
+                <span className="bg-white px-2 py-0.5 rounded border border-slate-200">
+                    Name: "{searchMeta.name}"
+                </span>
+                )}
+            </div>
             )}
-            {searchMeta.keywords?.map((kw, i) => (
-              <span key={i} className="bg-white px-2 py-0.5 rounded border border-slate-200">
-                "{kw}"
-              </span>
-            ))}
-            {searchMeta.name && (
-              <span className="bg-white px-2 py-0.5 rounded border border-slate-200">
-                Name: "{searchMeta.name}"
-              </span>
-            )}
-          </div>
-        )}
+        </div>
       </section>
 
       {/* Status messages */}
