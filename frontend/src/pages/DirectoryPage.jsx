@@ -1,7 +1,7 @@
 // src/pages/DirectoryPage.jsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchMembers } from "../api/directory";
+import { fetchMembers, searchDirectory } from "../api/directory";
 import { useAuth } from "../context/AuthContext.jsx";
 
 function roleLabel(type) {
@@ -19,55 +19,158 @@ function DirectoryPage() {
   const [filterRole, setFilterRole] = useState("ALL"); // ALL | RQ | RR
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchMeta, setSearchMeta] = useState(null);
+
+  const loadMembers = async () => {
+    try {
+      setLoading(true);
+      const roleParam = filterRole === "ALL" ? undefined : filterRole;
+      const { data } = await fetchMembers(roleParam);
+      setMembers(data.members || []);
+      setErr("");
+      setIsSearching(false);
+      setSearchMeta(null);
+    } catch (e) {
+      console.error("Directory load error:", e);
+      setErr(
+        e.response?.data?.message ||
+          `Failed to load directory: ${e.message || "Unknown error"}`
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const roleParam = filterRole === "ALL" ? undefined : filterRole;
-        const { data } = await fetchMembers(roleParam);
-        setMembers(data.members || []);
-        setErr("");
-      } catch (e) {
-        console.error("Directory load error:", e);
-        setErr(
-          e.response?.data?.message ||
-            `Failed to load directory: ${e.message || "Unknown error"}`
-        );
-      } finally {
-        setLoading(false);
-      }
-    })();
+    if (!isSearching) {
+      loadMembers();
+    }
   }, [filterRole]);
+
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) {
+      // If empty, just reload normal list
+      setIsSearching(false);
+      loadMembers();
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setIsSearching(true);
+      setErr("");
+      
+      const { data } = await searchDirectory(searchQuery);
+      setMembers(data.members || []);
+      setSearchMeta(data.searchMeta);
+      
+    } catch (e) {
+      console.error("Search error:", e);
+      setErr(
+        e.response?.data?.message ||
+          `Search failed: ${e.message || "Unknown error"}`
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchQuery("");
+    setIsSearching(false);
+    setSearchMeta(null);
+    loadMembers();
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header + Filters */}
-      <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Directory</h1>
-          <p className="text-sm text-slate-600">
-            Browse requesters and reviewers on Get Me Hired.
-          </p>
+      {/* Header + Search + Filters */}
+      <section className="space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Directory</h1>
+            <p className="text-sm text-slate-600">
+              Browse requesters and reviewers on Get Me Hired.
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <FilterChip
-            label="All"
-            active={filterRole === "ALL"}
-            onClick={() => setFilterRole("ALL")}
-          />
-          <FilterChip
-            label="Requesters"
-            active={filterRole === "RQ"}
-            onClick={() => setFilterRole("RQ")}
-          />
-          <FilterChip
-            label="Reviewers"
-            active={filterRole === "RR"}
-            onClick={() => setFilterRole("RR")}
-          />
-        </div>
+        {/* AI Search Bar */}
+        <form onSubmit={handleSearch} className="relative max-w-2xl">
+          <div className="relative">
+            <input
+              type="text"
+              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+              placeholder="Try 'I'm looking for a finance expert to review my resume'..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+              🔍
+            </span>
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={clearSearch}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <p className="text-[10px] text-slate-500 mt-1 ml-1">
+            AI-powered search: Describe who you're looking for in natural language.
+          </p>
+        </form>
+
+        {/* Filters (only show if not searching, or maybe keep them to filter search results? 
+            For now, let's hide them during search to avoid confusion as search might override role) 
+        */}
+        {!isSearching && (
+          <div className="flex items-center gap-2">
+            <FilterChip
+              label="All"
+              active={filterRole === "ALL"}
+              onClick={() => setFilterRole("ALL")}
+            />
+            <FilterChip
+              label="Requesters"
+              active={filterRole === "RQ"}
+              onClick={() => setFilterRole("RQ")}
+            />
+            <FilterChip
+              label="Reviewers"
+              active={filterRole === "RR"}
+              onClick={() => setFilterRole("RR")}
+            />
+          </div>
+        )}
+        
+        {isSearching && searchMeta && (
+          <div className="flex flex-wrap gap-2 text-xs text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100">
+            <span className="font-semibold">AI Filtered by:</span>
+            {searchMeta.role && (
+              <span className="bg-white px-2 py-0.5 rounded border border-slate-200">
+                Role: {roleLabel(searchMeta.role)}
+              </span>
+            )}
+            {searchMeta.keywords?.map((kw, i) => (
+              <span key={i} className="bg-white px-2 py-0.5 rounded border border-slate-200">
+                "{kw}"
+              </span>
+            ))}
+            {searchMeta.name && (
+              <span className="bg-white px-2 py-0.5 rounded border border-slate-200">
+                Name: "{searchMeta.name}"
+              </span>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Status messages */}
@@ -78,9 +181,19 @@ function DirectoryPage() {
       {!loading && !err && (
         <section>
           {members.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              No members found for this filter.
-            </p>
+            <div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+              <p className="text-slate-500 font-medium">
+                {isSearching ? "No User Matches this search" : "No members found for this filter."}
+              </p>
+              {isSearching && (
+                <button 
+                  onClick={clearSearch}
+                  className="mt-2 text-sm text-indigo-600 hover:underline"
+                >
+                  Clear search and show all members
+                </button>
+              )}
+            </div>
           ) : (
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {members.map((m) => (

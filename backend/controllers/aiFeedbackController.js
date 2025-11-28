@@ -91,6 +91,13 @@ STYLE RULES FOR REWRITES:
 - Avoid first-person ("I", "my") in experience bullets.
 - Avoid generic buzzwords (e.g. "hardworking", "motivated") unless attached to concrete results.
 
+BULLET POINT REWRITE GUIDELINES:
+- When suggesting changes to a bullet point, ALWAYS provide the complete replacement bullet point.
+- Do NOT suggest replacing just part of a bullet point (e.g., mid-sentence fragments, or the other part of a preamble/colon).
+- If a bullet needs improvement, include the entire rewritten bullet in "suggested".
+- If rewriting a multi-line bullet, include all lines in your suggestion.
+- This ensures the UI can cleanly replace the entire bullet at once, maintaining resume structure.
+
 OUTPUT RULES:
 - The ENTIRE response MUST be valid JSON.
 - Do NOT wrap JSON in any extra formatting.

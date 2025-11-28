@@ -14,6 +14,13 @@ export const uploadResumeFile = (formData) => {
   });
 };
 
+// extract HTML content from an uploaded file (preview only)
+export const extractResumeFile = (formData) => {
+  return api.post(`/api/resumes/extract`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+};
+
 // get the text content of a resume version
 export const fetchResumeContent = (resumeVersionsId) =>
   api.get(`/api/resumes/content/${resumeVersionsId}`);
@@ -25,6 +32,10 @@ export const updateResumeContent = (resumeVersionsId, content) =>
 // stream a file (for viewing)
 export const getResumeFileUrl = (resumeVersionsId) =>
   `/api/resumes/file/${resumeVersionsId}`;
+
+// download a file
+export const downloadResumeFile = (resumeVersionsId) =>
+  api.get(`/api/resumes/file/${resumeVersionsId}`, { responseType: "blob" });
 
 // delete a version
 export const deleteResumeVersion = (resumeVersionsId) =>

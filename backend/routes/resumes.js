@@ -9,10 +9,13 @@ import { verifyToken } from "../middleware/authMiddleware.js";
 import {
   uploadResume,
   getAllMyResumes,
+  getAllMyResumeVersions,
   createResumeVersionWithFile,
-  getResumeFile,
+  createResumeVersionWithContent,
+  getResumeVersionFile,
   deleteResumeVersion,
   getResumeVersions,
+  extractResumeFile,
   getResumeContent,
   updateResumeContent,
 } from "../controllers/resumeController.js";
@@ -65,7 +68,7 @@ const upload = multer({ storage, fileFilter });
 router.get("/mine", verifyToken, getAllMyResumes);
 
 // GET /api/resumes/my-versions -> get all my resume versions (for creating review request)
-router.get("/my-versions", verifyToken, getResumeVersions);
+router.get("/my-versions", verifyToken, getAllMyResumeVersions);
 
 // POST /api/resumes/upload -> upload a new resume or new version (unified handler)
 router.post(
@@ -73,6 +76,14 @@ router.post(
   verifyToken,
   upload.single("file"),
   uploadResume
+);
+
+// POST /api/resumes/extract -> extract HTML preview from uploaded file (no persistence)
+router.post(
+  "/extract",
+  verifyToken,
+  upload.single("file"),
+  extractResumeFile
 );
 
 // POST /api/resumes/:resumeId/versions/file
@@ -84,9 +95,17 @@ router.post(
   createResumeVersionWithFile
 );
 
-// GET /api/resumes/file/:resumeVersionsId
+// POST /api/resumes/:resumeId/versions
+//    -> create a new version with HTML content directly (no file)
+router.post(
+  "/:resumeId/versions",
+  verifyToken,
+  createResumeVersionWithContent
+);
+
+// GET /api/resumes/file/:versionId
 //   -> stream the stored file to the client
-router.get("/file/:resumeVersionsId", verifyToken, getResumeFile);
+router.get("/file/:versionId", verifyToken, getResumeVersionFile);
 
 // GET /api/resumes/content/:resumeVersionsId
 //   -> get the text content of a resume version

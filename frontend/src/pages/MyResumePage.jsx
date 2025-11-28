@@ -1,15 +1,16 @@
 // src/pages/MyResumesPage.jsx
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
-import ReactQuill from "react-quill";
-import "react-quill/dist/quill.snow.css";
+import ResumeEditor from "../components/ResumeEditor.jsx";
 import {
   fetchMyResumes,
   uploadResumeFile,
   deleteResumeVersion,
   fetchResumeContent,
   updateResumeContent,
+  downloadResumeFile,
 } from "../api/resumes";
+import html2pdf from "html2pdf.js";
 
 function formatDate(d) {
   const dt = new Date(d);
@@ -334,6 +335,54 @@ export default function MyResumesPage() {
     setHasContentChanged(newContent !== selectedVersion?.content);
   };
 
+  const handleDownload = async () => {
+    if (!selectedVersion) return;
+    try {
+      const response = await downloadResumeFile(selectedVersion.resume_versions_id);
+      const blob = new Blob([response.data], { type: response.headers['content-type'] });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', selectedVersion.file_name || 'resume');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Download error:", e);
+      alert("Failed to download file.");
+    }
+  };
+
+  const handleExportPdf = () => {
+    if (!editingContent) return;
+    
+    // Create a temporary container for the PDF content
+    const element = document.createElement("div");
+    element.innerHTML = editingContent;
+    element.className = "prose prose-sm max-w-none"; 
+    
+    // Apply styles to match editor (A4)
+    element.style.width = "210mm";
+    element.style.minHeight = "297mm";
+    element.style.padding = "0.5mm 1mm";
+    element.style.fontFamily = "Arial, sans-serif";
+    element.style.fontSize = "9pt";
+    element.style.lineHeight = "1.5";
+    element.style.color = "#000";
+    element.style.background = "#fff";
+    
+    const opt = {
+      margin: 0,
+      filename: selectedVersion.file_name ? selectedVersion.file_name.replace(/\.[^/.]+$/, "") + ".pdf" : "resume.pdf",
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+    };
+    
+    html2pdf().set(opt).from(element).save();
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -432,28 +481,12 @@ export default function MyResumesPage() {
                 ) : contentError ? (
                   <p className="text-xs text-red-500">{contentError}</p>
                 ) : (
-                  <div className="flex flex-col gap-2 flex-1">
-                    {/* Quill Rich Text Editor */}
-                    <div className="flex-1 border border-slate-300 rounded-md overflow-hidden flex flex-col bg-white">
-                      <ReactQuill
-                        value={editingContent}
+                  <div className="flex flex-col gap-2 flex-1 overflow-hidden">
+                    {/* Tiptap Rich Text Editor */}
+                    <div className="flex-1 overflow-auto bg-slate-100 rounded border border-slate-200 p-4 h-[800px]">
+                      <ResumeEditor
+                        content={editingContent}
                         onChange={handleContentChange}
-                        theme="snow"
-                        modules={{
-                          toolbar: [
-                            [{ header: [1, 2, 3, false] }],
-                            ["bold", "italic", "underline", "strike"],
-                            [{ list: "ordered" }, { list: "bullet" }],
-                            ["blockquote", "code-block"],
-                            ["link"],
-                            ["clean"],
-                          ],
-                        }}
-                        style={{
-                          height: "100%",
-                          display: "flex",
-                          flexDirection: "column",
-                        }}
                       />
                     </div>
 
@@ -470,16 +503,25 @@ export default function MyResumesPage() {
                           Save as New Version
                         </button>
                       )}
-                      {selectedVersion.file_url && (
-                        <a
-                          href={selectedVersion.file_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-3 py-1.5 text-xs rounded bg-slate-600 text-white hover:bg-slate-700 inline-block"
+                      {/* Always show export options if content exists */}
+                      <div className="flex gap-2">
+                        {selectedVersion.file_url && (
+                          <button
+                            onClick={handleDownload}
+                            className="px-3 py-1.5 text-xs rounded bg-slate-600 text-white hover:bg-slate-700 inline-block"
+                            title="Download the original uploaded file"
+                          >
+                            Download Original
+                          </button>
+                        )}
+                        <button
+                          onClick={handleExportPdf}
+                          className="px-3 py-1.5 text-xs rounded bg-red-600 text-white hover:bg-red-700 inline-block"
+                          title="Export current content as PDF"
                         >
-                          Download File
-                        </a>
-                      )}
+                          Export to PDF
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}

@@ -115,117 +115,116 @@
   color: #666;
 }
 
-/* React Quill Editor Styling */
-.ql-container {
-  font-size: 14px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
-    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-    sans-serif;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  border: none !important;
+/* Tiptap Editor Styling */
+.tiptap {
+  outline: none;
 }
 
-.ql-editor {
-  flex: 1;
-  padding: 12px;
-  overflow-y: auto;
-  min-height: 200px;
+.tiptap p {
+  margin: 0.5em 0;
 }
 
-.ql-editor.ql-blank::before {
-  color: #9ca3af;
+.tiptap h1,
+.tiptap h2,
+.tiptap h3 {
+  margin: 0.75em 0 0.5em 0;
+  font-weight: 600;
+}
+
+.tiptap h1 {
+  font-size: 1.5em;
+}
+
+.tiptap h2 {
+  font-size: 1.25em;
+}
+
+.tiptap h3 {
+  font-size: 1.1em;
+}
+
+.tiptap strong,
+.tiptap b {
+  font-weight: 600;
+}
+
+.tiptap em,
+.tiptap i {
   font-style: italic;
 }
 
-.ql-toolbar {
-  background-color: #f9fafb;
-  border-bottom: 1px solid #e5e7eb !important;
-  border-top: none !important;
-  border-left: none !important;
-  border-right: none !important;
-  padding: 8px;
+.tiptap u {
+  text-decoration: underline;
 }
 
-.ql-toolbar.ql-snow {
-  padding: 8px;
+.tiptap s {
+  text-decoration: line-through;
 }
 
-.ql-toolbar.ql-snow .ql-formats {
-  margin-right: 8px;
+.tiptap ul,
+.tiptap ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
 }
 
-.ql-toolbar.ql-snow .ql-stroke {
-  stroke: #6b7280;
+.tiptap li {
+  margin: 0.25em 0;
 }
 
-.ql-toolbar.ql-snow .ql-fill {
-  fill: #6b7280;
+.tiptap a {
+  color: #0066cc;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
-.ql-toolbar.ql-snow .ql-picker-label {
-  color: #6b7280;
+.tiptap a:hover {
+  color: #0052a3;
+  text-decoration: underline;
 }
 
-.ql-toolbar.ql-snow button:hover,
-.ql-toolbar.ql-snow button.ql-active,
-.ql-toolbar.ql-snow button:focus,
-.ql-toolbar.ql-snow button.ql-selected {
-  color: #1f2937;
+.tiptap a:visited {
+  color: #663399;
 }
 
-.ql-toolbar.ql-snow button:hover .ql-stroke,
-.ql-toolbar.ql-snow button.ql-active .ql-stroke,
-.ql-toolbar.ql-snow button.ql-selected .ql-stroke {
-  stroke: #1f2937;
+.tiptap hr {
+  border: none;
+  border-top: 2px solid #e5e7eb;
+  margin: 1em 0;
 }
 
-.ql-toolbar.ql-snow button:hover .ql-fill,
-.ql-toolbar.ql-snow button.ql-active .ql-fill,
-.ql-toolbar.ql-snow button.ql-selected .ql-fill {
-  fill: #1f2937;
+.tiptap u {
+  text-decoration: underline;
 }
 
-.ql-editor {
-  background-color: white;
-}
-
-/* Quill content styling */
-.ql-editor h1 {
-  font-size: 1.5em;
-  margin-bottom: 0.5em;
-}
-
-.ql-editor h2 {
-  font-size: 1.25em;
-  margin-bottom: 0.5em;
-}
-
-.ql-editor h3 {
-  font-size: 1.1em;
-  margin-bottom: 0.5em;
-}
-
-.ql-editor blockquote {
+.tiptap blockquote {
   border-left: 4px solid #ccc;
-  margin-bottom: 5px;
-  margin-top: 5px;
-  padding-left: 16px;
+  margin: 0.5em 0;
+  padding-left: 1em;
+  color: #666;
 }
 
-.ql-editor code {
+.tiptap code {
   background-color: #f3f4f6;
-  padding: 2px 4px;
+  padding: 0.2em 0.4em;
   border-radius: 3px;
+  font-size: 0.9em;
+  font-family: monospace;
+}
+
+.tiptap pre {
+  background-color: #f3f4f6;
+  border-radius: 3px;
+  padding: 0.8em;
+  margin: 0.5em 0;
+  overflow-x: auto;
+  font-family: monospace;
   font-size: 0.9em;
 }
 
-.ql-editor pre {
-  background-color: #f3f4f6;
-  border-radius: 3px;
-  padding: 8px;
-  margin-bottom: 5px;
+.tiptap pre code {
+  background-color: transparent;
+  padding: 0;
 }
+
 
 

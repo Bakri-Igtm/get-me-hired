@@ -7,3 +7,7 @@ export const fetchMembers = (role) => {
   }
   return api.get("/api/directory", { params });
 };
+
+export const searchDirectory = (query) => {
+  return api.post("/api/directory/search", { query });
+};

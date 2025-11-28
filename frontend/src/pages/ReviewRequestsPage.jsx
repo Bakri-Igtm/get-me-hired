@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import ResumeEditor from "../components/ResumeEditor.jsx";
 import api from "../api/axios.js";
 import {
   fetchIncomingRequests,
@@ -16,7 +17,7 @@ import {
   addReviewComment,
 } from "../api/reviewComments";
 import { fetchMembers } from "../api/directory";
-import { fetchMyResumeVersions } from "../api/resumes";
+import { fetchMyResumeVersions, uploadResumeFile } from "../api/resumes";
 
 function roleLabel(type) {
   if (type === "RQ") return "Requester";
@@ -76,6 +77,11 @@ export default function ReviewRequestsPage() {
   const [newNote, setNewNote] = useState("");
   const [newFile, setNewFile] = useState(null);
   const [formError, setFormError] = useState("");
+  
+  // Toggle between selecting existing version vs uploading new file
+  const [resumeMode, setResumeMode] = useState("select"); // "select" | "upload"
+  const [uploadedFileContent, setUploadedFileContent] = useState(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   // ask AI feedback?
   const [aiRequested, setAiRequested] = useState(true);
@@ -97,6 +103,9 @@ export default function ReviewRequestsPage() {
   const [sentRequests, setSentRequests] = useState([]);
   const [loadingSent, setLoadingSent] = useState(false);
   const [sentError, setSentError] = useState("");
+  
+  // Track if we've loaded outgoing requests to prevent infinite loop
+  const outgoingLoadedRef = useRef(false);
 
   const loadIncoming = async () => {
     try {
@@ -140,10 +149,14 @@ export default function ReviewRequestsPage() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === "sent" && sentRequests.length === 0 && !loadingSent) {
+    if (activeTab === "sent" && !outgoingLoadedRef.current && !loadingSent) {
+      outgoingLoadedRef.current = true;
       loadOutgoing();
+    } else if (activeTab !== "sent") {
+      // Reset when switching away from "sent" tab
+      outgoingLoadedRef.current = false;
     }
-  }, [activeTab, sentRequests.length, loadingSent]);
+  }, [activeTab, loadingSent]);
 
   // Load detail when selectedId changes
   useEffect(() => {
@@ -310,6 +323,8 @@ export default function ReviewRequestsPage() {
     setSelectedResumeVersionId(null);
     setFormError("");
     setAiRequested(true); // default: ask AI
+    setResumeMode("select"); // default: select existing version
+    setUploadedFileContent(null);
 
     // Load potential reviewers (directory)
     if (!reviewerOptions.length) {
@@ -344,9 +359,21 @@ export default function ReviewRequestsPage() {
 
   // Actually send the request
   const handleSubmitNewRequest = async () => {
-    if (!selectedResumeVersionId) {
+    // Validate based on mode
+    if (resumeMode === "select" && !selectedResumeVersionId) {
       setFormError("Please select a resume version.");
       return;
+    }
+    
+    if (resumeMode === "upload") {
+      if (!uploadedFileContent) {
+        setFormError("Please upload and preview a resume file.");
+        return;
+      }
+      if (!newTrack.trim()) {
+        setFormError("Please enter a track/role focus for the new resume.");
+        return;
+      }
     }
 
     if (visibility === "private" && !selectedReviewerId) {
@@ -357,8 +384,37 @@ export default function ReviewRequestsPage() {
     setFormError("");
 
     try {
+      // If uploading new file, create new resume first
+      let versionIdToUse = selectedResumeVersionId;
+      
+      if (resumeMode === "upload" && uploadedFileContent) {
+        console.log("Creating new resume from uploaded file...");
+        // Upload file (or edited HTML content) as new resume
+        const formData = new FormData();
+        formData.append("mode", "new");
+        formData.append("trackTitle", newTrack.trim());
+        formData.append("versionLabel", "Version 1");
+        // If the user edited the uploaded content, send that as a text file so
+        // the backend will store the HTML string in the content column.
+        if (uploadedFileContent) {
+          const blob = new Blob([uploadedFileContent], { type: "text/plain" });
+          const fileFromContent = new File([blob], (newFile && newFile.name) || "resume_content.txt", { type: "text/plain" });
+          formData.append("file", fileFromContent);
+        } else {
+          formData.append("file", newFile);
+        }
+
+        const { data } = await uploadResumeFile(formData);
+        // Get the version ID from response
+        if (data.resume && data.resume.versions && data.resume.versions[0]) {
+          versionIdToUse = data.resume.versions[0].resume_versions_id;
+        } else {
+          throw new Error("Failed to create resume");
+        }
+      }
+      
       await createReviewRequest({
-        resumeVersionsId: selectedResumeVersionId,
+        resumeVersionsId: versionIdToUse,
         reviewerId: visibility === "private" ? selectedReviewerId : null,
         visibility, // 'public' or 'private'
         track: newTrack || null, // e.g. "SWE"
@@ -370,7 +426,7 @@ export default function ReviewRequestsPage() {
       setShowNewRequestForm(false);
     } catch (e) {
       console.error("createReviewRequest error:", e);
-      alert(
+      setFormError(
         e.response?.data?.message ||
           e.message ||
           "Error sending review request"
@@ -666,48 +722,157 @@ export default function ReviewRequestsPage() {
               </div>
             </div>
 
-            {/* Which resume version */}
+            {/* Which resume - select existing or upload new */}
             <div className="space-y-1">
               <label className="text-[11px] font-medium text-slate-700">
-                Which resume version do you want reviewed?
+                Resume
               </label>
-              {myVersionsLoading ? (
-                <p className="text-[11px] text-slate-500">
-                  Loading your resumes…
-                </p>
-              ) : myVersions.length === 0 ? (
-                <p className="text-[11px] text-slate-500">
-                  You don&apos;t have any resume versions yet. Create one
-                  from the dashboard first.
-                </p>
-              ) : (
-                <select
-                  className="w-full text-xs border border-slate-300 rounded px-2 py-1"
-                  value={selectedResumeVersionId || ""}
-                  onChange={(e) =>
-                    setSelectedResumeVersionId(
-                      e.target.value ? Number(e.target.value) : null
-                    )
-                  }
-                >
-                  <option value="">Select a version…</option>
-                  {myVersions.map((v) => {
-                    const label = `${
-                      myResumeMeta?.track || "Resume"
-                    } • ${v.version_name || `Version ${v.version_number}`} • ${formatDate(
-                      v.uploaded_at
-                    )}`;
-                    return (
-                      <option
-                        key={v.resume_versions_id}
-                        value={v.resume_versions_id}
-                      >
-                        {label}
-                      </option>
-                    );
-                  })}
-                </select>
-              )}
+              <div className="flex gap-2 text-[11px]">
+                <label className="inline-flex items-center gap-1">
+                  <input
+                    type="radio"
+                    name="resumeMode"
+                    value="select"
+                    checked={resumeMode === "select"}
+                    onChange={() => {
+                      setResumeMode("select");
+                      setNewFile(null);
+                      setUploadedFileContent(null);
+                    }}
+                  />
+                  <span>Select existing</span>
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  <input
+                    type="radio"
+                    name="resumeMode"
+                    value="upload"
+                    checked={resumeMode === "upload"}
+                    onChange={() => {
+                      setResumeMode("upload");
+                      setSelectedResumeVersionId(null);
+                    }}
+                  />
+                  <span>Upload new</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Select existing version */}
+            {resumeMode === "select" && (
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-slate-700">
+                  Which resume version do you want reviewed?
+                </label>
+                {myVersionsLoading ? (
+                  <p className="text-[11px] text-slate-500">
+                    Loading your resumes…
+                  </p>
+                ) : myVersions.length === 0 ? (
+                  <p className="text-[11px] text-slate-500">
+                    No resume versions available. Try uploading a new one.
+                  </p>
+                ) : (
+                  <select
+                    className="w-full text-xs border border-slate-300 rounded px-2 py-1"
+                    value={selectedResumeVersionId || ""}
+                    onChange={(e) =>
+                      setSelectedResumeVersionId(
+                        e.target.value ? Number(e.target.value) : null
+                      )
+                    }
+                  >
+                    <option value="">Select a version…</option>
+                    {myVersions.map((v) => {
+                      const label = `${
+                        myResumeMeta?.track || "Resume"
+                      } • ${v.version_name || `Version ${v.version_number}`} • ${formatDate(
+                        v.uploaded_at
+                      )}`;
+                      return (
+                        <option
+                          key={v.resume_versions_id}
+                          value={v.resume_versions_id}
+                        >
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                )}
+              </div>
+            )}
+
+            {/* Upload new file */}
+            {resumeMode === "upload" && (
+              <div className="space-y-2">
+                {/* File input */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-slate-700">
+                    Upload resume file
+                  </label>
+                  <input
+                    type="file"
+                    accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    className="w-full text-xs"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0] || null;
+                      if (!file) return;
+                      
+                      setNewFile(file);
+                      setUploadingFile(true);
+                      
+                      try {
+                        // Extract content from file
+                        const formData = new FormData();
+                        formData.append("file", file);
+                        const response = await api.post("/api/resumes/extract", formData);
+                        setUploadedFileContent(response.data.content || "");
+                      } catch (err) {
+                        console.error("Error extracting file content:", err);
+                        setFormError("Failed to extract file content. Try again.");
+                      } finally {
+                        setUploadingFile(false);
+                      }
+                    }}
+                  />
+                  {newFile && (
+                    <p className="text-[11px] text-slate-500">
+                      Selected: {newFile.name}
+                    </p>
+                  )}
+                </div>
+
+                {/* Preview with Tiptap editor */}
+                {uploadedFileContent && (
+                  <div className="space-y-1 border-t border-slate-200 pt-2">
+                    <p className="text-[11px] font-medium text-slate-700">
+                      Preview (editable)
+                    </p>
+                    <div className="max-h-48 overflow-y-auto border border-slate-300 rounded p-2 bg-white text-xs text-slate-700">
+                      <div className="h-40">
+                        <ResumeEditor
+                          content={uploadedFileContent}
+                          onChange={(html) => setUploadedFileContent(html)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Request Note / Description */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-slate-700">
+                Description / Note for Reviewer
+              </label>
+              <textarea
+                className="w-full text-xs border border-slate-300 rounded px-2 py-1 min-h-[60px]"
+                placeholder="e.g. Please focus on my work experience section..."
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+              />
             </div>
 
             {/* Reviewer selection (private only) */}
@@ -777,80 +942,6 @@ export default function ReviewRequestsPage() {
               </div>
             )}
 
-            {/* Track */}
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-slate-700">
-                Track / Role focus
-              </label>
-              <input
-                type="text"
-                className="w-full text-xs border border-slate-300 rounded px-2 py-1"
-                placeholder="e.g., Software Engineering, Data Science, Product Management"
-                value={newTrack}
-                onChange={(e) => setNewTrack(e.target.value)}
-              />
-            </div>
-
-            {/* Description */}
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-slate-700">
-                Describe what you want feedback on
-              </label>
-              <textarea
-                className="w-full text-xs border border-slate-300 rounded px-2 py-2 min-h-[80px]"
-                placeholder="Share context, target roles, what you're unsure about, etc."
-                value={newNote}
-                onChange={(e) => setNewNote(e.target.value)}
-              />
-            </div>
-
-            {/* AI feedback toggle */}
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-slate-700">
-                AI feedback
-              </label>
-              <div className="flex items-start gap-2 text-[11px]">
-                <input
-                  type="checkbox"
-                  id="aiRequested"
-                  className="mt-[2px]"
-                  checked={aiRequested}
-                  onChange={(e) => setAiRequested(e.target.checked)}
-                />
-                <label htmlFor="aiRequested" className="text-slate-600">
-                  Ask AI to privately review this resume too.
-                  <span className="block text-[10px] text-slate-400">
-                    Only you (the requester) will see the AI suggestions
-                    side panel. Reviewers and the public won’t see it.
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            {/* Upload (UI only for now) */}
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-slate-700">
-                Upload resume (Word document)
-              </label>
-              <input
-                type="file"
-                accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                className="w-full text-xs"
-                onChange={(e) => {
-                  const file = e.target.files?.[0] || null;
-                  setNewFile(file);
-                }}
-              />
-              {newFile && (
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Selected: {newFile.name}
-                </p>
-              )}
-              <p className="text-[10px] text-slate-400">
-                (Upload behavior not wired yet – this just updates the UI.)
-              </p>
-            </div>
-
             {formError && (
               <p className="text-[11px] text-red-600">{formError}</p>
             )}
@@ -872,6 +963,7 @@ export default function ReviewRequestsPage() {
           </div>
         </div>
       )}
+
     </div>
   );
 }
@@ -976,6 +1068,7 @@ function DetailView(props) {
   // Ref to textarea for auto-scrolling
   const textareaRef = useRef(null);
   const highlightLayerRef = useRef(null);
+  const resumeEditorRef = useRef(null);
 
   useEffect(() => {
     setEditorContent(request.resumeContent || "");
@@ -987,6 +1080,96 @@ function DetailView(props) {
 
   // Track highlighted ranges for accepted suggestions
   const [highlightedRanges, setHighlightedRanges] = useState([]);
+
+  // Modal for naming new version
+  const [showVersionNameModal, setShowVersionNameModal] = useState(false);
+  const [versionNameInput, setVersionNameInput] = useState("");
+  const [savingAsVersion, setSavingAsVersion] = useState(false);
+  const [versionModalError, setVersionModalError] = useState("");
+
+  // Helper: Strip HTML tags to get plain text for matching
+  const stripHtmlTags = (html) => {
+    const div = document.createElement("div");
+    div.innerHTML = html;
+    return div.textContent || div.innerText || "";
+  };
+
+  // Helper: Find text in HTML content and replace while preserving HTML structure
+  const replaceInHtml = (htmlContent, originalText, replacementText) => {
+    // If content doesn't have HTML tags, use simple replace
+    if (!htmlContent.includes("<")) {
+      return htmlContent.replace(originalText, replacementText);
+    }
+
+    try {
+      // 1. Build a map of text content to HTML indices
+      let myStripped = "";
+      const map = []; // map[i] = { start, end } in htmlContent for char i in myStripped
+
+      const tokenRegex = /(<[^>]+>)|(&[a-zA-Z\d]+;|&#\d+;|&#x[0-9a-fA-F]+;)|([\s\S])/g;
+      let match;
+      
+      const decodeHtmlEntity = (str) => {
+        const txt = document.createElement("textarea");
+        txt.innerHTML = str;
+        return txt.value;
+      };
+
+      while ((match = tokenRegex.exec(htmlContent)) !== null) {
+        const [fullMatch, tag, entity, char] = match;
+        
+        if (tag) {
+          continue;
+        }
+        
+        const decoded = entity ? decodeHtmlEntity(entity) : char;
+        const start = match.index;
+        const end = start + fullMatch.length;
+        
+        for (let i = 0; i < decoded.length; i++) {
+          map.push({ start, end });
+        }
+        myStripped += decoded;
+      }
+
+      // 2. Find the match in myStripped
+      // Normalize original text to allow flexible whitespace matching
+      const normalize = (str) => str.replace(/\s+/g, " ").trim();
+      const normalizedOriginal = normalize(originalText);
+      
+      if (!normalizedOriginal) return htmlContent;
+
+      // Create regex: escape special chars, then replace spaces with \s+
+      const escaped = normalizedOriginal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regexPattern = escaped.replace(/ /g, "\\s+");
+      const regex = new RegExp(regexPattern); // Case sensitive to be safe, or "i" if desired
+      
+      const found = regex.exec(myStripped);
+      
+      if (!found) {
+        console.log("⚠️ Text not found in content");
+        return htmlContent;
+      }
+      
+      const startChar = found.index;
+      const endChar = startChar + found[0].length - 1; // inclusive index of last char
+      
+      // 3. Map back to HTML
+      const startHtml = map[startChar].start;
+      const endHtml = map[endChar].end;
+      
+      // Wrap replacement in <mark> tag for highlighting
+      const result = htmlContent.substring(0, startHtml) + "<mark>" + replacementText + "</mark>" + htmlContent.substring(endHtml);
+
+      console.log("✓ Found and replaced in HTML (preserving tags & entities)");
+      return result;
+    } catch (e) {
+      console.error("Error replacing in HTML:", e);
+      return htmlContent;
+    }
+  };
+
+  // Helper: Find suggestion ranges in content for highlighting
 
   // helper: find ranges of suggested text using regex/fuzzy whitespace
   const findSuggestionRanges = (content, suggested) => {
@@ -1010,18 +1193,8 @@ function DetailView(props) {
 
   // Sync scroll between textarea and highlight layer
   useEffect(() => {
-    const handleScroll = () => {
-      if (textareaRef.current && highlightLayerRef.current) {
-        highlightLayerRef.current.scrollTop = textareaRef.current.scrollTop;
-        highlightLayerRef.current.scrollLeft = textareaRef.current.scrollLeft;
-      }
-    };
-
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.addEventListener("scroll", handleScroll);
-      return () => textarea.removeEventListener("scroll", handleScroll);
-    }
+    // Scroll sync removed - now using Tiptap editor
+    // No longer needed
   }, []);
 
   useEffect(() => {
@@ -1066,6 +1239,12 @@ function DetailView(props) {
       anchor,
     });
     console.log("📄 Current editorContent length:", editorContent.length);
+    
+    // Debug: show what we're looking for
+    if (original) {
+      console.log("🔍 Looking for original text:", JSON.stringify(original.substring(0, 50)));
+      console.log("🔍 In content (first 100 chars):", JSON.stringify(editorContent.substring(0, 100)));
+    }
 
     // Apply the change to editorContent based on type
     let updatedContent = editorContent;
@@ -1074,80 +1253,103 @@ function DetailView(props) {
     if (type === "rewrite" || type === "replace") {
       // Replace original with suggested
       if (original && suggested) {
-        // Try exact match first
-        if (editorContent.includes(original)) {
-          console.log("✓ Found exact match");
-          updatedContent = editorContent.replace(original, suggested);
-          changeApplied = true;
+        // For HTML content, use the smart replacement function
+        if (editorContent.includes("<")) {
+          updatedContent = replaceInHtml(editorContent, original, suggested);
+          if (updatedContent !== editorContent) {
+            changeApplied = true;
+            console.log("✓ Replaced using HTML-aware replacement");
+          } else {
+            console.log("✗ HTML replacement didn't find match");
+          }
         } else {
-          console.log(
-            "✗ No exact match. Trying fuzzy match with normalized whitespace..."
-          );
-
-          const normalize = (str) => str.replace(/\s+/g, " ").trim();
-          const normalizedOriginal = normalize(original);
-          const normalizedContent = normalize(editorContent);
-
-          if (normalizedContent.includes(normalizedOriginal)) {
-            console.log("✓ Found match after normalization, applying...");
-            const escapedPattern = normalizedOriginal.replace(
-              /[.*+?^${}()|[\]\\]/g,
-              "\\$&"
-            );
-            const flexibleRegex = new RegExp(
-              escapedPattern.replace(/\s+/g, "\\s+"),
-              "gi"
-            );
-
-            if (flexibleRegex.test(editorContent)) {
-              updatedContent = editorContent.replace(
-                flexibleRegex,
-                suggested
-              );
-              changeApplied = true;
-              console.log("✓ Replaced with flexible regex");
-            }
+          // Plain text content - use simple matching
+          if (editorContent.includes(original)) {
+            console.log("✓ Found exact match");
+            updatedContent = editorContent.replace(original, suggested);
+            changeApplied = true;
           } else {
             console.log(
-              "✗ No fuzzy match found. Content not found in resume."
+              "✗ No exact match. Trying fuzzy match with normalized whitespace..."
             );
-            console.log(
-              "Looking for:",
-              normalizedOriginal.substring(0, 100)
-            );
-            console.log(
-              "In content:",
-              normalizedContent.substring(0, 100)
-            );
+
+            const normalize = (str) => str.replace(/\s+/g, " ").trim();
+            const normalizedOriginal = normalize(original);
+            const normalizedContent = normalize(editorContent);
+
+            if (normalizedContent.includes(normalizedOriginal)) {
+              console.log("✓ Found match after normalization, applying...");
+              const escapedPattern = normalizedOriginal.replace(
+                /[.*+?^${}()|[\]\\]/g,
+                "\\$&"
+              );
+              const flexibleRegex = new RegExp(
+                escapedPattern.replace(/\s+/g, "\\s+"),
+                "gi"
+              );
+
+              if (flexibleRegex.test(editorContent)) {
+                updatedContent = editorContent.replace(
+                  flexibleRegex,
+                  suggested
+                );
+                changeApplied = true;
+                console.log("✓ Replaced with flexible regex");
+              }
+            } else {
+              console.log(
+                "✗ No fuzzy match found. Content not found in resume."
+              );
+              console.log(
+                "Looking for:",
+                normalizedOriginal.substring(0, 100)
+              );
+              console.log(
+                "In content:",
+                normalizedContent.substring(0, 100)
+              );
+            }
           }
         }
       }
     } else if (type === "remove") {
       // Remove the original text
       if (original) {
-        if (editorContent.includes(original)) {
-          console.log("✓ Found text to remove (exact)");
-          updatedContent = editorContent.replace(original, "");
-          changeApplied = true;
+        // For HTML content, use the smart replacement function (replace with empty string)
+        if (editorContent.includes("<")) {
+          updatedContent = replaceInHtml(editorContent, original, "");
+          if (updatedContent !== editorContent) {
+            changeApplied = true;
+            console.log("✓ Removed using HTML-aware replacement");
+          } else {
+            console.log("✗ HTML removal didn't find match");
+          }
         } else {
-          console.log("✗ Trying fuzzy match for removal...");
-          const normalize = (str) => str.replace(/\s+/g, " ").trim();
-          const normalizedOriginal = normalize(original);
-          const normalizedContent = normalize(editorContent);
+          // Plain text content - use simple matching
+          if (editorContent.includes(original)) {
+            console.log("✓ Found text to remove (exact)");
+            updatedContent = editorContent.replace(original, "");
+            changeApplied = true;
+          } else {
+            console.log("✗ Trying fuzzy match for removal...");
+            const normalize = (str) => str.replace(/\s+/g, " ").trim();
+            const normalizedOriginal = normalize(original);
+            const normalizedContent = normalize(editorContent);
 
-          if (normalizedContent.includes(normalizedOriginal)) {
-            const escapedPattern = normalizedOriginal.replace(
-              /[.*+?^${}()|[\]\\]/g,
-              "\\$&"
-            );
-            const flexibleRegex = new RegExp(
-              escapedPattern.replace(/\s+/g, "\\s+"),
-              "i"
-            );
-            if (flexibleRegex.test(editorContent)) {
-              updatedContent = editorContent.replace(flexibleRegex, "");
-              changeApplied = true;
-              console.log("✓ Removed with flexible regex");
+            if (normalizedContent.includes(normalizedOriginal)) {
+              const escapedPattern = normalizedOriginal.replace(
+                /[.*+?^${}()|[\]\\]/g,
+                "\\$&"
+              );
+              const flexibleRegex = new RegExp(
+                escapedPattern.replace(/\s+/g, "\\s+"),
+                "i"
+              );
+              if (flexibleRegex.test(editorContent)) {
+                updatedContent = editorContent.replace(flexibleRegex, "");
+                changeApplied = true;
+                console.log("✓ Removed with flexible regex");
+              }
             }
           }
         }
@@ -1155,39 +1357,60 @@ function DetailView(props) {
     } else if (type === "add") {
       // Add suggested text (append to content or insert at anchor)
       if (suggested) {
-        if (anchor && editorContent.includes(anchor)) {
-          console.log("✓ Found anchor, inserting after it");
-          updatedContent = editorContent.replace(
-            anchor,
-            anchor + "\n" + suggested
-          );
-          changeApplied = true;
-        } else if (anchor) {
-          const normalize = (str) => str.replace(/\s+/g, " ").trim();
-          const normalizedAnchor = normalize(anchor);
-          const normalizedContent = normalize(editorContent);
-
-          if (normalizedContent.includes(normalizedAnchor)) {
-            const escapedPattern = normalizedAnchor.replace(
-              /[.*+?^${}()|[\]\\]/g,
-              "\\$&"
+        if (anchor) {
+          // For HTML content, use the smart replacement function
+          if (editorContent.includes("<")) {
+            updatedContent = replaceInHtml(
+              editorContent,
+              anchor,
+              anchor + "\n" + suggested
             );
-            const flexibleRegex = new RegExp(
-              escapedPattern.replace(/\s+/g, "\\s+"),
-              "i"
-            );
-            if (flexibleRegex.test(editorContent)) {
+            if (updatedContent !== editorContent) {
+              changeApplied = true;
+              console.log("✓ Found anchor with HTML-aware replacement, inserting");
+            } else {
+              // Anchor not found, append to end
+              console.log("✓ Anchor not found in HTML, appending to end");
+              updatedContent = editorContent + "\n" + suggested;
+              changeApplied = true;
+            }
+          } else {
+            // Plain text content - use simple matching
+            if (editorContent.includes(anchor)) {
+              console.log("✓ Found anchor, inserting after it");
               updatedContent = editorContent.replace(
-                flexibleRegex,
+                anchor,
                 anchor + "\n" + suggested
               );
               changeApplied = true;
-              console.log("✓ Found anchor with fuzzy match, inserting");
+            } else {
+              const normalize = (str) => str.replace(/\s+/g, " ").trim();
+              const normalizedAnchor = normalize(anchor);
+              const normalizedContent = normalize(editorContent);
+
+              if (normalizedContent.includes(normalizedAnchor)) {
+                const escapedPattern = normalizedAnchor.replace(
+                  /[.*+?^${}()|[\]\\]/g,
+                  "\\$&"
+                );
+                const flexibleRegex = new RegExp(
+                  escapedPattern.replace(/\s+/g, "\\s+"),
+                  "i"
+                );
+                if (flexibleRegex.test(editorContent)) {
+                  updatedContent = editorContent.replace(
+                    flexibleRegex,
+                    anchor + "\n" + suggested
+                  );
+                  changeApplied = true;
+                  console.log("✓ Found anchor with fuzzy match, inserting");
+                }
+              } else {
+                console.log("✓ Anchor not found, appending to end");
+                updatedContent = editorContent + "\n" + suggested;
+                changeApplied = true;
+              }
             }
-          } else {
-            console.log("✓ Anchor not found, appending to end");
-            updatedContent = editorContent + "\n" + suggested;
-            changeApplied = true;
           }
         } else {
           console.log("✓ No anchor, appending to end");
@@ -1202,22 +1425,19 @@ function DetailView(props) {
     // Update editor content locally
     setEditorContent(updatedContent);
 
-    // Regex-based highlight for the newly applied suggestion, auto-clear after 3s
-    if (changeApplied && suggested) {
-      const newRanges = findSuggestionRanges(updatedContent, suggested).map(
-        (r) => ({ id, ...r })
-      );
-
-      if (newRanges.length > 0) {
-        // Add highlight immediately
-        setHighlightedRanges((prev) => [...prev, ...newRanges]);
-
-        // Remove highlight for this suggestion after 3 seconds
+    // Highlight the change in Tiptap (visual cue)
+    // Note: replaceInHtml already wraps the text in <mark> tags, so it renders highlighted.
+    // We just need to clear it after a delay so it doesn't persist forever.
+    if (changeApplied && resumeEditorRef.current) {
+      try {
+        // Auto-remove highlight after 5 seconds
         setTimeout(() => {
-          setHighlightedRanges((prev) =>
-            prev.filter((range) => range.id !== id)
-          );
-        }, 3000);
+          if (resumeEditorRef.current) {
+            resumeEditorRef.current.clearHighlights();
+          }
+        }, 5000);
+      } catch (err) {
+        console.error("Error handling highlights in Tiptap:", err);
       }
     }
 
@@ -1275,59 +1495,75 @@ function DetailView(props) {
     }
   };
 
+  // show AI panel only if request asked for AI + backend says user can see it
+  const showAiPanel = !!request.ai_requested && canSeeAiFeedback;
+
   const handleSaveAsNewVersion = async () => {
-    if (!detail?.request || !editorContent.trim()) {
+    if (!request || !editorContent.trim()) {
+      alert("Resume content is empty");
+      return;
+    }
+
+    // Show the modal to prompt for version name
+    setVersionNameInput("");
+    setVersionModalError("");
+    setShowVersionNameModal(true);
+  };
+
+  const handleConfirmVersionName = async () => {
+    if (!versionNameInput.trim()) {
+      setVersionModalError("Please enter a version name");
+      return;
+    }
+
+    if (!request || !editorContent.trim()) {
       alert("Resume content is empty");
       return;
     }
 
     console.log("💾 Saving new version...");
-    console.log("📋 Resume ID:", detail.request.resume_id);
+    console.log("📋 Resume ID:", request.resume_id);
     console.log("📝 Content length:", editorContent.length);
+    console.log("📛 Version name:", versionNameInput);
+
+    setSavingAsVersion(true);
+    setVersionModalError("");
 
     try {
-      // Step 1: Create new resume version with edited content
+      // Create new resume version with edited content
       const payload = {
-        resumeId: detail.request.resume_id,
         content: editorContent,
+        version_name: versionNameInput.trim(),
       };
 
-      console.log("📤 Sending payload:", payload);
+      console.log("📤 Sending payload to create new version");
 
-      const response = await api.post("/resume-versions", payload);
+      const response = await api.post(
+        `/api/resumes/${request.resume_id}/versions`,
+        payload
+      );
 
       console.log("📥 Response data:", response.data);
 
       const newVersionId = response.data.resume_versions_id;
       console.log("📌 New version ID:", newVersionId);
 
-      // Step 2: Update the review_request to point to the new version
-      console.log(
-        "🔄 Updating review request to point to new version..."
-      );
-      const updateResponse = await api.put(
-        `/review-requests/${detail.request.request_id}/resume-version`,
-        {
-          resumeVersionsId: newVersionId,
-        }
-      );
-
-      console.log("✅ Review request updated:", updateResponse.data);
+      setShowVersionNameModal(false);
+      setVersionNameInput("");
+      setVersionModalError("");
 
       alert(
-        "✓ Resume version saved successfully! Your changes will persist across page refreshes."
+        "✓ Resume version saved successfully as '" + versionNameInput + "'!"
       );
     } catch (err) {
       console.error("❌ Error saving resume version:", err);
-      alert(
-        "Error saving resume version: " +
-          (err.response?.data?.message || err.message)
+      setVersionModalError(
+        "Error: " + (err.response?.data?.message || err.message)
       );
+    } finally {
+      setSavingAsVersion(false);
     }
   };
-
-  // show AI panel only if request asked for AI + backend says user can see it
-  const showAiPanel = !!request.ai_requested && canSeeAiFeedback;
 
   return (
     <div className="flex flex-col gap-4 h-full">
@@ -1403,7 +1639,7 @@ function DetailView(props) {
             </div>
 
             <div className="bg-slate-100 rounded-md p-3 flex justify-center">
-              <div className="bg-white shadow-sm border border-slate-200 w-full max-w-full overflow-hidden rounded-md relative flex-1">
+              <div className="bg-slate-100 w-full max-w-full overflow-auto rounded-md relative flex-1 h-[800px]">
                 {/* Status bar showing if there are pending changes */}
                 {localSuggestions.filter(
                   (s) => s.status === "pending"
@@ -1420,75 +1656,16 @@ function DetailView(props) {
                   </div>
                 )}
 
-                {/* Highlight layer - renders text with blue highlights */}
-                <div
-                  ref={highlightLayerRef}
-                  className="absolute inset-0 z-0 pointer-events-none overflow-y-auto p-4 text-xs leading-relaxed font-mono whitespace-pre-wrap break-words text-transparent"
-                >
-                  {(() => {
-                    if (highlightedRanges.length === 0)
-                      return editorContent;
-
-                    const sortedRanges = [...highlightedRanges].sort(
-                      (a, b) => a.start - b.start
-                    );
-                    const parts = [];
-                    let lastEnd = 0;
-
-                    sortedRanges.forEach((range) => {
-                      // Add text before highlight
-                      if (lastEnd < range.start) {
-                        parts.push({
-                          text: editorContent.substring(
-                            lastEnd,
-                            range.start
-                          ),
-                          highlight: false,
-                        });
-                      }
-                      // Add highlighted text
-                      parts.push({
-                        text: editorContent.substring(
-                          range.start,
-                          range.end
-                        ),
-                        highlight: true,
-                      });
-                      lastEnd = range.end;
-                    });
-
-                    // Add remaining text
-                    if (lastEnd < editorContent.length) {
-                      parts.push({
-                        text: editorContent.substring(lastEnd),
-                        highlight: false,
-                      });
-                    }
-
-                    return parts.map((part, idx) =>
-                      part.highlight ? (
-                        <span
-                          key={idx}
-                          className="bg-blue-300/50"
-                        >
-                          {part.text}
-                        </span>
-                      ) : (
-                        <span key={idx}>{part.text}</span>
-                      )
-                    );
-                  })()}
+                {/* Tiptap Editor */}
+                <div className="w-full flex-1 relative">
+                  <ResumeEditor
+                    ref={resumeEditorRef}
+                    content={editorContent}
+                    onChange={(newContent) => {
+                      setEditorContent(newContent);
+                    }}
+                  />
                 </div>
-
-                {/* Textarea - on top, transparent background */}
-                <textarea
-                  ref={textareaRef}
-                  className="w-full h-[700px] p-4 text-xs leading-relaxed resize-none border-none outline-none font-mono bg-transparent relative z-10"
-                  value={editorContent}
-                  onChange={(e) => setEditorContent(e.target.value)}
-                  readOnly={!isOwner}
-                  spellCheck={false}
-                />
               </div>
             </div>
 
@@ -1523,7 +1700,19 @@ function DetailView(props) {
               </p>
             )}
 
-            {localSuggestions.length === 0 ? (
+            {!aiFeedback ? (
+              <div className="flex flex-col items-center justify-center py-8 gap-2">
+                <div className="inline-block animate-spin">
+                  <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Generating suggestions…
+                </p>
+              </div>
+            ) : localSuggestions.length === 0 ? (
               <p className="text-[11px] text-slate-500">
                 No structured suggestions yet. You can still use the
                 feedback summary below to edit your resume.
@@ -1854,6 +2043,59 @@ function DetailView(props) {
           ))}
         </div>
       </div>
+
+      {/* Save as New Version Modal */}
+      {showVersionNameModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white border border-slate-200 rounded-xl shadow-lg max-w-sm w-full mx-4 p-4 space-y-3">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Save as New Version
+            </h2>
+            <p className="text-xs text-slate-600">
+              Give your updated resume a name to save it as a new version.
+            </p>
+
+            <input
+              type="text"
+              placeholder="e.g., Updated Resume, Final Version..."
+              value={versionNameInput}
+              onChange={(e) => setVersionNameInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && versionNameInput.trim()) {
+                  handleConfirmVersionName();
+                }
+              }}
+              className="w-full text-xs border border-slate-300 rounded px-2 py-1"
+              autoFocus
+            />
+
+            {versionModalError && (
+              <p className="text-xs text-red-500">{versionModalError}</p>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setShowVersionNameModal(false);
+                  setVersionNameInput("");
+                  setVersionModalError("");
+                }}
+                disabled={savingAsVersion}
+                className="text-xs px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmVersionName}
+                disabled={savingAsVersion || !versionNameInput.trim()}
+                className="text-xs px-3 py-1.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                {savingAsVersion ? "Saving..." : "Save Version"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
