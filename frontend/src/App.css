@@ -40,3 +40,192 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Formatted resume content display */
+.formatted-content {
+  text-align: left;
+}
+
+.formatted-content p {
+  margin: 0.5rem 0;
+  line-height: 1.5;
+}
+
+.formatted-content strong,
+.formatted-content b {
+  font-weight: 600;
+}
+
+.formatted-content em,
+.formatted-content i {
+  font-style: italic;
+}
+
+.formatted-content h1,
+.formatted-content h2,
+.formatted-content h3,
+.formatted-content h4,
+.formatted-content h5,
+.formatted-content h6 {
+  margin: 0.75rem 0 0.5rem 0;
+  font-weight: 600;
+}
+
+.formatted-content h1 {
+  font-size: 1.5rem;
+}
+
+.formatted-content h2 {
+  font-size: 1.25rem;
+}
+
+.formatted-content h3 {
+  font-size: 1.1rem;
+}
+
+.formatted-content ul,
+.formatted-content ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.formatted-content li {
+  margin: 0.25rem 0;
+}
+
+.formatted-content a {
+  color: #0066cc;
+  text-decoration: underline;
+}
+
+.formatted-content a:hover {
+  color: #0052a3;
+}
+
+.formatted-content hr {
+  margin: 1rem 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.formatted-content blockquote {
+  margin: 0.5rem 0;
+  padding-left: 1rem;
+  border-left: 3px solid #e5e7eb;
+  color: #666;
+}
+
+/* React Quill Editor Styling */
+.ql-container {
+  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: none !important;
+}
+
+.ql-editor {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;
+  min-height: 200px;
+}
+
+.ql-editor.ql-blank::before {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.ql-toolbar {
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  padding: 8px;
+}
+
+.ql-toolbar.ql-snow {
+  padding: 8px;
+}
+
+.ql-toolbar.ql-snow .ql-formats {
+  margin-right: 8px;
+}
+
+.ql-toolbar.ql-snow .ql-stroke {
+  stroke: #6b7280;
+}
+
+.ql-toolbar.ql-snow .ql-fill {
+  fill: #6b7280;
+}
+
+.ql-toolbar.ql-snow .ql-picker-label {
+  color: #6b7280;
+}
+
+.ql-toolbar.ql-snow button:hover,
+.ql-toolbar.ql-snow button.ql-active,
+.ql-toolbar.ql-snow button:focus,
+.ql-toolbar.ql-snow button.ql-selected {
+  color: #1f2937;
+}
+
+.ql-toolbar.ql-snow button:hover .ql-stroke,
+.ql-toolbar.ql-snow button.ql-active .ql-stroke,
+.ql-toolbar.ql-snow button.ql-selected .ql-stroke {
+  stroke: #1f2937;
+}
+
+.ql-toolbar.ql-snow button:hover .ql-fill,
+.ql-toolbar.ql-snow button.ql-active .ql-fill,
+.ql-toolbar.ql-snow button.ql-selected .ql-fill {
+  fill: #1f2937;
+}
+
+.ql-editor {
+  background-color: white;
+}
+
+/* Quill content styling */
+.ql-editor h1 {
+  font-size: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.ql-editor h2 {
+  font-size: 1.25em;
+  margin-bottom: 0.5em;
+}
+
+.ql-editor h3 {
+  font-size: 1.1em;
+  margin-bottom: 0.5em;
+}
+
+.ql-editor blockquote {
+  border-left: 4px solid #ccc;
+  margin-bottom: 5px;
+  margin-top: 5px;
+  padding-left: 16px;
+}
+
+.ql-editor code {
+  background-color: #f3f4f6;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+.ql-editor pre {
+  background-color: #f3f4f6;
+  border-radius: 3px;
+  padding: 8px;
+  margin-bottom: 5px;
+}
+
+

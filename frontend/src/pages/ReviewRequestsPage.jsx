@@ -694,7 +694,7 @@ export default function ReviewRequestsPage() {
                   {myVersions.map((v) => {
                     const label = `${
                       myResumeMeta?.track || "Resume"
-                    } • v${v.version_number} • ${formatDate(
+                    } • ${v.version_name || `Version ${v.version_number}`} • ${formatDate(
                       v.uploaded_at
                     )}`;
                     return (

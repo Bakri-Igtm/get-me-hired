@@ -1,10 +1,14 @@
 // src/pages/MyResumesPage.jsx
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
+import ReactQuill from "react-quill";
+import "react-quill/dist/quill.snow.css";
 import {
   fetchMyResumes,
   uploadResumeFile,
   deleteResumeVersion,
+  fetchResumeContent,
+  updateResumeContent,
 } from "../api/resumes";
 
 function formatDate(d) {
@@ -43,6 +47,18 @@ export default function MyResumesPage() {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [modalError, setModalError] = useState("");
+
+  // Edit content mode
+  const [isEditingContent, setIsEditingContent] = useState(false);
+  const [contentLoading, setContentLoading] = useState(false);
+  const [editingContent, setEditingContent] = useState("");
+  const [savingContent, setSavingContent] = useState(false);
+  const [contentError, setContentError] = useState("");
+  const [hasContentChanged, setHasContentChanged] = useState(false);
+  const [showVersionModal, setShowVersionModal] = useState(false);
+  const [newVersionLabel, setNewVersionLabel] = useState("");
+  const [savingAsVersion, setSavingAsVersion] = useState(false);
+  const [versionModalError, setVersionModalError] = useState("");
 
   const hasMaxResumes = resumes.length >= limits.maxResumes;
 
@@ -90,8 +106,12 @@ export default function MyResumesPage() {
   };
 
   const handleSelectVersion = (resumeId, version) => {
+    console.log("Selected version:", version);
     setSelectedResumeId(resumeId);
     setSelectedVersion(version);
+    // Set the content from the version
+    setEditingContent(version.content || "");
+    setHasContentChanged(false);
   };
 
   const resetModal = () => {
@@ -231,6 +251,89 @@ export default function MyResumesPage() {
     }
   };
 
+  const handleEditContent = async () => {
+    if (!selectedVersion) return;
+    setIsEditingContent(true);
+    setContentLoading(true);
+    setContentError("");
+    try {
+      const { data } = await fetchResumeContent(selectedVersion.resume_versions_id);
+      setEditingContent(data.content || "");
+    } catch (err) {
+      console.error("Error fetching content:", err);
+      setContentError(err.response?.data?.message || "Error loading content");
+    } finally {
+      setContentLoading(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingContent(false);
+    setEditingContent("");
+    setContentError("");
+  };
+
+  const handleSaveContent = async () => {
+    if (!selectedVersion) return;
+    setSavingContent(true);
+    setContentError("");
+    try {
+      await updateResumeContent(selectedVersion.resume_versions_id, editingContent);
+      // Update the local state
+      if (selectedVersion) {
+        setSelectedVersion({
+          ...selectedVersion,
+          content: editingContent,
+        });
+      }
+      setIsEditingContent(false);
+      setEditingContent("");
+    } catch (err) {
+      console.error("Error saving content:", err);
+      setContentError(err.response?.data?.message || "Error saving content");
+    } finally {
+      setSavingContent(false);
+    }
+  };
+
+  const handleSaveAsVersion = async () => {
+    if (!newVersionLabel.trim()) {
+      setVersionModalError("Please enter a version name");
+      return;
+    }
+
+    setSavingAsVersion(true);
+    setVersionModalError("");
+    try {
+      const formData = new FormData();
+      formData.append("mode", "existing");
+      formData.append("resumeId", String(selectedResumeId));
+      formData.append("versionLabel", newVersionLabel.trim());
+      
+      // Create a text file from the content
+      const blob = new Blob([editingContent], { type: "text/plain" });
+      const file = new File([blob], "resume_content.txt", { type: "text/plain" });
+      formData.append("file", file);
+
+      await uploadResumeFile(formData);
+
+      setShowVersionModal(false);
+      setNewVersionLabel("");
+      setHasContentChanged(false);
+      await loadMyResumes();
+    } catch (err) {
+      console.error("Error saving as version:", err);
+      setVersionModalError(err.response?.data?.message || "Error saving version");
+    } finally {
+      setSavingAsVersion(false);
+    }
+  };
+
+  const handleContentChange = (newContent) => {
+    setEditingContent(newContent);
+    setHasContentChanged(newContent !== selectedVersion?.content);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -295,12 +398,11 @@ export default function MyResumesPage() {
           </div>
         </section>
 
-        {/* RIGHT: selected version preview (we'll improve this later) */}
-        <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm min-h-[260px]">
+        {/* RIGHT: selected version preview with editable content */}
+        <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm min-h-[260px] flex flex-col">
           {!selectedVersion ? (
             <p className="text-sm text-slate-500">
-              Select a resume version on the left to see details and open
-              the file. We&apos;ll wire up a rich inline preview next.
+              Select a resume version on the left to view and edit its content.
             </p>
           ) : (
             <div className="flex flex-col gap-3 h-full">
@@ -316,12 +418,7 @@ export default function MyResumesPage() {
                   </span>
                 </p>
                 <p className="text-sm font-semibold text-slate-900">
-                  Version v{selectedVersion.version_number}{" "}
-                  {selectedVersion.version_label && (
-                    <span className="text-xs text-slate-500">
-                      • {selectedVersion.version_label}
-                    </span>
-                  )}
+                  {selectedVersion.version_name || `Version ${selectedVersion.version_number}`}
                 </p>
                 <p className="text-[11px] text-slate-500">
                   Uploaded {formatDate(selectedVersion.uploaded_at)} •{" "}
@@ -329,32 +426,63 @@ export default function MyResumesPage() {
                 </p>
               </div>
 
-              <div className="flex-1 flex flex-col gap-3">
-                <div className="text-xs text-slate-600">
-                  <p className="mb-1">
-                    This version points to the original file you uploaded
-                    (.doc, .docx, or .txt). For now, you can open it in a
-                    new tab:
-                  </p>
-                  {selectedVersion.file_url ? (
-                    <a
-                      href={selectedVersion.file_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center text-[11px] px-3 py-1.5 rounded-full bg-slate-900 text-white hover:bg-slate-800"
-                    >
-                      Open file
-                    </a>
-                  ) : (
-                    <p className="text-[11px] text-amber-700">
-                      No file URL returned from backend for this version.
-                    </p>
-                  )}
-                  <p className="mt-3 text-[11px] text-slate-400">
-                    Next step: we&apos;ll render the Word or text content
-                    inline here so you don&apos;t have to leave the app.
-                  </p>
-                </div>
+              <div className="flex-1 flex flex-col gap-3 overflow-hidden">
+                {contentLoading ? (
+                  <p className="text-xs text-slate-500">Loading content...</p>
+                ) : contentError ? (
+                  <p className="text-xs text-red-500">{contentError}</p>
+                ) : (
+                  <div className="flex flex-col gap-2 flex-1">
+                    {/* Quill Rich Text Editor */}
+                    <div className="flex-1 border border-slate-300 rounded-md overflow-hidden flex flex-col bg-white">
+                      <ReactQuill
+                        value={editingContent}
+                        onChange={handleContentChange}
+                        theme="snow"
+                        modules={{
+                          toolbar: [
+                            [{ header: [1, 2, 3, false] }],
+                            ["bold", "italic", "underline", "strike"],
+                            [{ list: "ordered" }, { list: "bullet" }],
+                            ["blockquote", "code-block"],
+                            ["link"],
+                            ["clean"],
+                          ],
+                        }}
+                        style={{
+                          height: "100%",
+                          display: "flex",
+                          flexDirection: "column",
+                        }}
+                      />
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2">
+                      {hasContentChanged && (
+                        <button
+                          onClick={() => {
+                            setShowVersionModal(true);
+                            setVersionModalError("");
+                          }}
+                          className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
+                        >
+                          Save as New Version
+                        </button>
+                      )}
+                      {selectedVersion.file_url && (
+                        <a
+                          href={selectedVersion.file_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3 py-1.5 text-xs rounded bg-slate-600 text-white hover:bg-slate-700 inline-block"
+                        >
+                          Download File
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -533,6 +661,53 @@ export default function MyResumesPage() {
           </div>
         </div>
       )}
+
+      {/* Save as New Version Modal */}
+      {showVersionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white border border-slate-200 rounded-xl shadow-lg max-w-sm w-full mx-4 p-4 space-y-3">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Save as New Version
+            </h2>
+            <p className="text-xs text-slate-600">
+              Give your updated resume a name to save it as a new version.
+            </p>
+            
+            <input
+              type="text"
+              placeholder="e.g., Updated Resume, Final Version..."
+              value={newVersionLabel}
+              onChange={(e) => setNewVersionLabel(e.target.value)}
+              className="w-full text-xs border border-slate-300 rounded px-2 py-1"
+            />
+            
+            {versionModalError && (
+              <p className="text-xs text-red-500">{versionModalError}</p>
+            )}
+            
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setShowVersionModal(false);
+                  setNewVersionLabel("");
+                  setVersionModalError("");
+                }}
+                disabled={savingAsVersion}
+                className="text-xs px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveAsVersion}
+                disabled={savingAsVersion || !newVersionLabel.trim()}
+                className="text-xs px-3 py-1.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                {savingAsVersion ? "Saving..." : "Save Version"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -604,13 +779,8 @@ function ResumeTrackCard({
                       }
                     >
                       <span className="font-medium">
-                        v{v.version_number}
-                      </span>{" "}
-                      {v.version_label && (
-                        <span className="text-[10px]">
-                          • {v.version_label}
-                        </span>
-                      )}
+                        {v.version_name || `Version ${v.version_number}`}
+                      </span>
                       <span className="block text-[10px] text-slate-500">
                         {v.file_name} • {formatDate(v.uploaded_at)}
                       </span>

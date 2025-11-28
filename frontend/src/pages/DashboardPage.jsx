@@ -37,6 +37,12 @@ export default function DashboardPage() {
   const [versionLoading, setVersionLoading] = useState(false);
   const [versionError, setVersionError] = useState("");
 
+  // Edit mode
+  const [isEditingContent, setIsEditingContent] = useState(false);
+  const [editingContent, setEditingContent] = useState("");
+  const [savingContent, setSavingContent] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
   // AI feedback & human reviews
   const [aiFeedback, setAiFeedback] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -53,7 +59,7 @@ export default function DashboardPage() {
       setResumesError("");
       try {
         const res = await api.get("/api/resumes/mine");
-        setResumes(res.data || []);
+        setResumes(res.data.resumes || []);
       } catch (err) {
         console.error("Error fetching resumes:", err);
         setResumesError(
@@ -118,7 +124,7 @@ export default function DashboardPage() {
 
     try {
       const [contentRes, feedbackRes, reviewsRes] = await Promise.allSettled([
-        api.get(`/api/resume-versions/${versionId}`),
+        api.get(`/api/resumes/content/${versionId}`),
         api.get(`/api/ai-feedback/version/${versionId}`),
         api.get(`/api/reviews/version/${versionId}`),
       ]);
@@ -172,7 +178,43 @@ export default function DashboardPage() {
 
   const handleVersionClick = async (version) => {
     setSelectedVersion(version);
+    setIsEditingContent(false);
+    setSaveError("");
     await loadVersionDetails(version.resume_versions_id);
+  };
+
+  const handleEditContent = () => {
+    setIsEditingContent(true);
+    setEditingContent(versionContent);
+    setSaveError("");
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingContent(false);
+    setEditingContent("");
+    setSaveError("");
+  };
+
+  const handleSaveContent = async () => {
+    if (!selectedVersion) return;
+    
+    setSavingContent(true);
+    setSaveError("");
+    try {
+      await api.patch(`/api/resumes/content/${selectedVersion.resume_versions_id}`, {
+        content: editingContent,
+      });
+      setVersionContent(editingContent);
+      setIsEditingContent(false);
+      setEditingContent("");
+    } catch (err) {
+      console.error("Error saving content:", err);
+      setSaveError(
+        err.response?.data?.message || "Error saving content."
+      );
+    } finally {
+      setSavingContent(false);
+    }
   };
 
   // ---------------- HANDLERS: AI FEEDBACK ----------------
@@ -257,107 +299,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN — Resumes + Version detail */}
+        {/* RIGHT COLUMN — Version detail (No more resumes list) */}
         <div className="space-y-6">
-          {/* My Resumes list */}
-          <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-            <h2 className="font-semibold text-slate-900 mb-1">My Resumes</h2>
-            <p className="text-xs text-slate-500 mb-3">
-              Click a resume to expand and see its versions. Click a version to
-              view its content, AI feedback, and reviews.
-            </p>
-
-            {resumesLoading ? (
-              <p className="text-sm text-slate-500">Loading resumes...</p>
-            ) : resumesError ? (
-              <p className="text-sm text-red-500">{resumesError}</p>
-            ) : resumes.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                You don&apos;t have any resumes yet.
-              </p>
-            ) : (
-              <ul className="divide-y divide-slate-200">
-                {resumes.map((resume) => (
-                  <li
-                    key={resume.resume_id}
-                    className={`py-3 px-2 rounded-md transition-all duration-200 cursor-pointer ${
-                      expandedResumeId === resume.resume_id
-                        ? "bg-slate-50 shadow-sm"
-                        : "hover:bg-slate-50"
-                    }`}
-                    onClick={() => handleResumeClick(resume.resume_id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-slate-800">
-                          {resume.track || "Untitled resume"}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          Resume ID:{" "}
-                          <span className="font-mono">{resume.resume_id}</span>
-                        </p>
-                      </div>
-                      <span className="text-xs text-slate-400">
-                        Created{" "}
-                        {new Date(resume.created_at).toLocaleDateString("en-US")}
-                      </span>
-                    </div>
-
-                    {/* Versions */}
-                    {expandedResumeId === resume.resume_id && (
-                      <div
-                        className="mt-3 border-t border-slate-200 pt-2"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {versionsLoading ? (
-                          <p className="text-xs text-slate-500">
-                            Loading versions...
-                          </p>
-                        ) : versionsError ? (
-                          <p className="text-xs text-red-500">
-                            {versionsError}
-                          </p>
-                        ) : versions.length === 0 ? (
-                          <p className="text-xs text-slate-500">
-                            No versions yet for this resume.
-                          </p>
-                        ) : (
-                          <ul className="space-y-1">
-                            {versions.map((v) => (
-                              <li
-                                key={v.resume_versions_id}
-                                className={`flex items-center justify-between rounded-md px-2 py-1 text-xs border border-transparent hover:border-slate-300 cursor-pointer transition-all duration-150 ${
-                                  selectedVersion &&
-                                  selectedVersion.resume_versions_id ===
-                                    v.resume_versions_id
-                                    ? "bg-slate-900 text-slate-50"
-                                    : "bg-slate-100 text-slate-700"
-                                }`}
-                                onClick={() => handleVersionClick(v)}
-                              >
-                                <div>
-                                  <span className="font-mono mr-1">
-                                    v{v.version_number}
-                                  </span>
-                                  <span className="text-slate-400">
-                                    ({v.resume_versions_id})
-                                  </span>
-                                </div>
-                                <span className="text-[10px] text-slate-400">
-                                  {v.content_length || 0} chars
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
           {/* Version detail: content + feedback + comments */}
           {selectedVersion && (
             <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
@@ -367,7 +310,7 @@ export default function DashboardPage() {
                     Resume Version Detail
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Viewing version v{selectedVersion.version_number} (
+                    Viewing version {selectedVersion.version_name || `Version ${selectedVersion.version_number}`} (
                     {selectedVersion.resume_versions_id})
                   </p>
                 </div>
@@ -399,15 +342,55 @@ export default function DashboardPage() {
                 ) : versionError ? (
                   <p className="text-sm text-red-500">{versionError}</p>
                 ) : (
-                  <div className="border border-slate-200 rounded-md bg-slate-50 max-h-64 overflow-y-auto p-3">
-                    {versionContent ? (
-                      <pre className="whitespace-pre-wrap break-words text-xs text-slate-800 font-mono">
-                        {versionContent}
-                      </pre>
+                  <div>
+                    {isEditingContent ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={editingContent}
+                          onChange={(e) => setEditingContent(e.target.value)}
+                          className="w-full h-64 p-3 border border-slate-300 rounded-md font-mono text-xs"
+                          placeholder="Edit resume content..."
+                        />
+                        {saveError && (
+                          <p className="text-xs text-red-500">{saveError}</p>
+                        )}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleSaveContent}
+                            disabled={savingContent}
+                            className="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+                          >
+                            {savingContent ? "Saving..." : "Save"}
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            disabled={savingContent}
+                            className="px-3 py-1.5 text-xs rounded bg-slate-300 text-slate-700 hover:bg-slate-400"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
                     ) : (
-                      <p className="text-xs text-slate-500">
-                        No content stored for this version.
-                      </p>
+                      <div className="space-y-2">
+                        <div className="border border-slate-200 rounded-md bg-slate-50 max-h-64 overflow-y-auto p-3">
+                          {versionContent ? (
+                            <pre className="whitespace-pre-wrap break-words text-xs text-slate-800 font-mono">
+                              {versionContent}
+                            </pre>
+                          ) : (
+                            <p className="text-xs text-slate-500">
+                              No content stored for this version.
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={handleEditContent}
+                          className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
+                        >
+                          Edit Content
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}

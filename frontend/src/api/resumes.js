@@ -1,55 +1,31 @@
 // src/api/resumes.js
 import api from "./axios";
 
-// ✅ keep your existing functions
-export const fetchMyResumeVersions = () =>
-  api.get("/api/resumes/my");
+// list all resumes (tracks) + latest version info
+export const fetchMyResumes = () => api.get("/api/resumes/mine");
 
-export const createResumeVersion = (resumeId, content) =>
-  api.post(`/api/resumes/${resumeId}/versions`, { content });
+// fetch all my resume versions for creating a review request
+export const fetchMyResumeVersions = () => api.get("/api/resumes/my-versions");
 
-/**
- * NEW: grouped view for "My Resumes" page.
- * Backend should return something like:
- * {
- *   resumes: [
- *     {
- *       resume_id,
- *       trackTitle,
- *       created_at,
- *       versions: [
- *         {
- *           resume_versions_id,
- *           version_number,
- *           version_label,
- *           file_name,
- *           uploaded_at,
- *           file_url
- *         }
- *       ]
- *     }
- *   ],
- *   limits: { maxResumes: 3, maxVersionsPerResume: 5 }
- * }
- */
-export const fetchMyResumes = () =>
-  api.get("/api/my-resumes");
-
-/**
- * NEW: upload a new resume track or a new version (Word/.txt file).
- * mode: "new" | "existing"
- * - "new"     => create new track (trackTitle required)
- * - "existing" => add version under existing track (resumeId required)
- */
-export const uploadResumeFile = (formData) =>
-  api.post("/api/resumes/upload", formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
+// upload a new version file under a resume track
+export const uploadResumeFile = (formData) => {
+  return api.post(`/api/resumes/upload`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
   });
+};
 
-/**
- * NEW: delete a specific version (to free up slots)
- */
+// get the text content of a resume version
+export const fetchResumeContent = (resumeVersionsId) =>
+  api.get(`/api/resumes/content/${resumeVersionsId}`);
+
+// update the text content of a resume version
+export const updateResumeContent = (resumeVersionsId, content) =>
+  api.patch(`/api/resumes/content/${resumeVersionsId}`, { content });
+
+// stream a file (for viewing)
+export const getResumeFileUrl = (resumeVersionsId) =>
+  `/api/resumes/file/${resumeVersionsId}`;
+
+// delete a version
 export const deleteResumeVersion = (resumeVersionsId) =>
-  api.delete(`/api/resume-versions/${resumeVersionsId}`);
+  api.delete(`/api/resumes/version/${resumeVersionsId}`);
