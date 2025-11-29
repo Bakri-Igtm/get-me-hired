@@ -13,9 +13,13 @@ import {
   addLink,
   deleteLink,
   getPublicProfile,
+  getLeaderboard,
 } from "../controllers/profileController.js";
 
 const router = express.Router();
+
+// leaderboard
+router.get("/leaderboard", verifyToken, getLeaderboard);
 
 // core profile
 router.get("/public/:id", verifyToken, getPublicProfile);

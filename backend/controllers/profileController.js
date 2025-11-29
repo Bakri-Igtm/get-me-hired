@@ -378,3 +378,54 @@ export const getPublicProfile = async (req, res) => {
       .json({ message: "Server error loading public profile" });
   }
 };
+
+/** GET /api/profile/leaderboard */
+export const getLeaderboard = async (req, res) => {
+  try {
+    const { userType } = req.user; // 'RQ', 'RR', 'AD'
+
+    let showRequesters = false;
+    let showReviewers = false;
+
+    if (userType === "RQ") {
+      showRequesters = true;
+    } else if (userType === "RR") {
+      showReviewers = true;
+    } else if (userType === "AD") {
+      showRequesters = true;
+      showReviewers = true;
+    }
+
+    const response = {
+      requesters: [],
+      reviewers: [],
+    };
+
+    if (showRequesters) {
+      const [rows] = await pool.query(
+        `SELECT user_id, user_fname, user_lname, points, user_type
+         FROM users
+         WHERE user_type = 'RQ'
+         ORDER BY points DESC
+         LIMIT 10`
+      );
+      response.requesters = rows;
+    }
+
+    if (showReviewers) {
+      const [rows] = await pool.query(
+        `SELECT user_id, user_fname, user_lname, points, user_type
+         FROM users
+         WHERE user_type = 'RR'
+         ORDER BY points DESC
+         LIMIT 10`
+      );
+      response.reviewers = rows;
+    }
+
+    return res.json(response);
+  } catch (err) {
+    console.error("getLeaderboard error:", err);
+    return res.status(500).json({ message: "Error loading leaderboard" });
+  }
+};

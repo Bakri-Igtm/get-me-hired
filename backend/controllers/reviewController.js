@@ -116,6 +116,23 @@ export const createOrUpdateReview = async (req, res) => {
       [resumeVersionsId]
     );
 
+    // 6) 🔹 LEADERBOARD: Calculate and increment reviewer points
+    // < 50 words: 1 point
+    // 50-100 words: 2 points
+    // > 100 words: 3 points
+    const wordCount = (comment || "").trim().split(/\s+/).filter(w => w.length > 0).length;
+    let pointsToAdd = 1;
+    if (wordCount > 100) {
+      pointsToAdd = 3;
+    } else if (wordCount >= 50) {
+      pointsToAdd = 2;
+    }
+
+    await conn.query(
+      `UPDATE users SET points = points + ? WHERE user_id = ?`,
+      [pointsToAdd, userId]
+    );
+
     await conn.commit();
 
     return res.status(201).json({

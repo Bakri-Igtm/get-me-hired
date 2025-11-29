@@ -96,6 +96,12 @@ export const createReviewRequest = async (req, res) => {
       });
     }
 
+    // 🔹 LEADERBOARD: Increment requester points (+1)
+    await pool.query(
+      `UPDATE users SET points = points + 1 WHERE user_id = ?`,
+      [requesterId]
+    );
+
     return res.status(201).json({
       request_id: result.insertId,
       message: "Review request created",

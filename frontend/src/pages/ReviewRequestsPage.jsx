@@ -564,7 +564,7 @@ export default function ReviewRequestsPage() {
         )}
       </header>
 
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)]">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1.1fr)_minmax(0,2.3fr)]">
         {/* LEFT: Feed */}
         <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-900 mb-3">
@@ -1619,7 +1619,7 @@ function DetailView(props) {
       {showAiPanel ? (
         <div className="flex flex-col md:flex-row gap-3">
           {/* "Word document" style area */}
-          <div className="flex-1 flex flex-col gap-2">
+          <div className="flex-1 flex flex-col gap-2 min-w-0">
             <div className="text-xs text-slate-500 flex items-center justify-between">
               <span>Resume preview</span>
               {isOwner ? (
@@ -1682,7 +1682,7 @@ function DetailView(props) {
           </div>
 
           {/* AI suggestions side panel */}
-          <aside className="w-full md:w-[260px] border border-slate-200 rounded-lg p-3 bg-slate-50 flex flex-col gap-2">
+          <aside className="w-full md:w-[260px] shrink-0 border border-slate-200 rounded-lg p-3 bg-slate-50 flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-semibold text-slate-900">
                 AI suggestions

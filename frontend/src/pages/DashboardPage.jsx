@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../api/axios.js";
+import { getLeaderboard } from "../api/profile.js";
 import { useAuth } from "../context/AuthContext.jsx";
 
 export default function DashboardPage() {
@@ -52,6 +53,10 @@ export default function DashboardPage() {
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewsError, setReviewsError] = useState("");
 
+  // Leaderboard
+  const [leaderboard, setLeaderboard] = useState({ requesters: [], reviewers: [] });
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+
   // ---------------- FETCH RESUMES ----------------
   useEffect(() => {
     const fetchResumes = async () => {
@@ -70,7 +75,20 @@ export default function DashboardPage() {
       }
     };
 
+    const fetchLeaderboard = async () => {
+      setLeaderboardLoading(true);
+      try {
+        const res = await getLeaderboard();
+        setLeaderboard(res.data);
+      } catch (err) {
+        console.error("Error fetching leaderboard:", err);
+      } finally {
+        setLeaderboardLoading(false);
+      }
+    };
+
     fetchResumes();
+    fetchLeaderboard();
   }, []);
 
   // ---------------- HANDLERS: RESUMES & VERSIONS ----------------
@@ -281,20 +299,50 @@ export default function DashboardPage() {
               </p>
             </section>
 
-            {/* Leaderboard placeholder card */}
+            {/* Leaderboard card */}
             <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
               <h2 className="font-semibold text-slate-900 mb-2">Leaderboard</h2>
               <p className="text-xs text-slate-500 mb-2">
-                See top reviewers, most active requesters, and recent highlights.
+                Top contributors in the community.
               </p>
-              <div className="border border-dashed border-slate-300 rounded-lg p-3 text-xs text-slate-500 bg-slate-50">
-                Leaderboard coming soon. We&apos;ll surface stats like:
-                <ul className="list-disc list-inside mt-1 space-y-0.5">
-                  <li>Total reviews done</li>
-                  <li>Average review rating</li>
-                  <li>Badges & streaks</li>
-                </ul>
-              </div>
+              
+              {leaderboardLoading ? (
+                <p className="text-xs text-slate-500">Loading leaderboard...</p>
+              ) : (
+                <div className="space-y-4">
+                  {leaderboard.requesters && leaderboard.requesters.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Top Requesters</h3>
+                      <ul className="space-y-1">
+                        {leaderboard.requesters.map((u, i) => (
+                          <li key={u.user_id} className="flex justify-between text-xs text-slate-600">
+                            <span>{i + 1}. {u.user_fname} {u.user_lname}</span>
+                            <span className="font-mono font-medium text-slate-900">{u.points} pts</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {leaderboard.reviewers && leaderboard.reviewers.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Top Reviewers</h3>
+                      <ul className="space-y-1">
+                        {leaderboard.reviewers.map((u, i) => (
+                          <li key={u.user_id} className="flex justify-between text-xs text-slate-600">
+                            <span>{i + 1}. {u.user_fname} {u.user_lname}</span>
+                            <span className="font-mono font-medium text-slate-900">{u.points} pts</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {(!leaderboard.requesters?.length && !leaderboard.reviewers?.length) && (
+                     <p className="text-xs text-slate-400 italic">No leaderboard data available yet.</p>
+                  )}
+                </div>
+              )}
             </section>
           </div>
         </div>

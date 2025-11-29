@@ -65,8 +65,14 @@ export const searchDirectory = async (req, res) => {
           content: `You are a search query parser for a professional networking site.
           Extract the following from the user's search query:
           - keywords: list of relevant skills, job titles, industries, or topics. IMPORTANT: Include variations, synonyms, and related job titles to maximize matches (e.g. if user says "software engineering", include "software engineer", "developer", "coding", "programmer", "engineering").
-          - role: "RQ" (Requester), "RR" (Reviewer), or null. IMPORTANT: Only set this if the user EXPLICITLY asks for a "reviewer", "requester", "mentor", or "candidate". If they just say "looking for someone" or "people" or "expert", set to null.
+            * IF the user asks for "random", "any", or "all" users/reviewers/requesters without specifying a skill/industry, return an empty list [] for keywords.
+          - role: "RQ" (Requester), "RR" (Reviewer), or null. 
+            * Set to "RR" if user asks for "reviewer", "mentor", "coach".
+            * Set to "RQ" if user asks for "requester", "candidate", "job seeker".
+            * Set to null if user asks for "person", "user", "anyone", "someone", "people".
           - name: if the user is searching for a specific person, extract the name.
+            * CRITICAL: If the query contains a proper noun or a word that looks like a first/last name (e.g. "ola", "john", "smith"), extract it as 'name'.
+            * If the query is short (1-2 words) and not clearly a skill/role, treat it as a name.
           
           Return JSON: { "keywords": [], "role": "RQ"|"RR"|null, "name": string|null }`
         },
@@ -78,60 +84,25 @@ export const searchDirectory = async (req, res) => {
     });
 
     const searchParams = JSON.parse(completion.choices[0].message.content);
-    const { keywords, role, name } = searchParams;
+    let { keywords, role, name } = searchParams;
+
+    // Fallback: If AI returns nothing specific (no keywords, no name) but we have a query, 
+    // treat the query as a potential name/keyword to ensure we don't return empty results for valid names.
+    if ((!keywords || keywords.length === 0) && !name && query.trim().length < 50) {
+       // If it wasn't a "random/any" search (which usually has role set or explicit intent),
+       // assume it's a direct search term.
+       if (!role) {
+          name = query.trim();
+          keywords = [query.trim()];
+       }
+    }
+
+    // If no keywords and no name, we want to show everyone (filtered by role if set).
+    // So we give everyone a base score of 1.
+    const isVagueSearch = (!keywords || keywords.length === 0) && !name;
+    const baseScore = isVagueSearch ? 1 : 0;
 
     // 2. Build SQL Query with scoring
-    let sql = `
-      SELECT
-        u.user_id,
-        u.user_fname AS firstName,
-        u.user_lname AS lastName,
-        u.user_type,
-        p.headline,
-        p.summary,
-        p.avatar_url,
-        (0
-    `;
-
-    const params = [];
-
-    // Scoring logic
-    if (name) {
-      sql += ` + (CASE WHEN CONCAT(u.user_fname, ' ', u.user_lname) LIKE ? THEN 50 ELSE 0 END)`;
-      params.push(`%${name}%`);
-    }
-
-    if (keywords && keywords.length > 0) {
-      keywords.forEach(kw => {
-        const term = `%${kw}%`;
-        // Headline matches are high value
-        sql += ` + (CASE WHEN p.headline LIKE ? THEN 10 ELSE 0 END)`;
-        params.push(term);
-        // Summary matches
-        sql += ` + (CASE WHEN p.summary LIKE ? THEN 5 ELSE 0 END)`;
-        params.push(term);
-        // Experience matches (joined table check would be complex, so we'll do a subquery or just check profile for now if we had denormalized data. 
-        // For now, let's stick to profile fields to keep it fast, or do a LEFT JOIN check)
-      });
-    }
-
-    sql += `) as score
-      FROM users u
-      LEFT JOIN profile p ON p.user_id = u.user_id
-      WHERE 1=1
-    `;
-
-    // Filter by role if specified
-    if (role) {
-      sql += ` AND u.user_type = ?`;
-      params.push(role);
-    }
-
-    // Only return results with score > 0
-    sql += ` HAVING score > 0 ORDER BY score DESC LIMIT 20`;
-
-    // If we want to search education/experience, we need to join them.
-    // Let's do a more comprehensive query with joins for better "AI" feel.
     // We will group by user_id to avoid duplicates.
     
     let complexSql = `
@@ -143,7 +114,7 @@ export const searchDirectory = async (req, res) => {
         p.headline,
         p.avatar_url,
         SUM(
-          0
+          ${baseScore}
     `;
     
     const complexParams = [];
@@ -156,6 +127,10 @@ export const searchDirectory = async (req, res) => {
     if (keywords && keywords.length > 0) {
       keywords.forEach(kw => {
         const term = `%${kw}%`;
+        // Name matches (in case name was misclassified as keyword)
+        complexSql += ` + (CASE WHEN CONCAT(u.user_fname, ' ', u.user_lname) LIKE ? THEN 30 ELSE 0 END)`;
+        complexParams.push(term);
+
         // Profile matches
         complexSql += ` + (CASE WHEN p.headline LIKE ? THEN 20 ELSE 0 END)`;
         complexParams.push(term);

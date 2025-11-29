@@ -21,3 +21,6 @@ export const deleteLink = (id) => api.delete(`/api/profile/links/${id}`);
 //public profile
 export const getPublicProfile = (userId) =>
   api.get(`/api/profile/public/${userId}`);
+
+// leaderboard
+export const getLeaderboard = () => api.get("/api/profile/leaderboard");
