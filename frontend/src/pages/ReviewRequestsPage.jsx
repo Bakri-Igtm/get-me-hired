@@ -18,6 +18,7 @@ import {
 } from "../api/reviewComments";
 import { fetchMembers } from "../api/directory";
 import { fetchMyResumeVersions, uploadResumeFile } from "../api/resumes";
+import html2pdf from "html2pdf.js";
 
 function roleLabel(type) {
   if (type === "RQ") return "Requester";
@@ -481,33 +482,35 @@ export default function ReviewRequestsPage() {
             detailed feedback.
           </p>
 
-          {/* Tabs: Received / Sent */}
-          <div className="inline-flex mt-2 rounded-full border border-slate-200 bg-slate-50 p-1 text-xs">
-            <button
-              type="button"
-              onClick={() => setActiveTab("received")}
-              className={
-                "px-3 py-1 rounded-full " +
-                (activeTab === "received"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-700 hover:bg-slate-100")
-              }
-            >
-              Received
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("sent")}
-              className={
-                "px-3 py-1 rounded-full " +
-                (activeTab === "sent"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-700 hover:bg-slate-100")
-              }
-            >
-              Sent
-            </button>
-          </div>
+          {/* Tabs: Received / Sent - Only for Requesters */}
+          {user?.user_type !== "RR" && (
+            <div className="inline-flex mt-2 rounded-full border border-slate-200 bg-slate-50 p-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setActiveTab("received")}
+                className={
+                  "px-3 py-1 rounded-full " +
+                  (activeTab === "received"
+                    ? "bg-slate-900 text-white"
+                    : "text-slate-700 hover:bg-slate-100")
+                }
+              >
+                Received
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("sent")}
+                className={
+                  "px-3 py-1 rounded-full " +
+                  (activeTab === "sent"
+                    ? "bg-slate-900 text-white"
+                    : "text-slate-700 hover:bg-slate-100")
+                }
+              >
+                Sent
+              </button>
+            </div>
+          )}
 
           {/* Visibility filter (only for Received) */}
           {activeTab === "received" && (
@@ -568,7 +571,9 @@ export default function ReviewRequestsPage() {
         {/* LEFT: Feed */}
         <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-900 mb-3">
-            {activeTab === "received"
+            {user?.user_type === "RR"
+              ? "Requests for you"
+              : activeTab === "received"
               ? "Requests for you"
               : "Requests you’ve sent"}
           </h2>
@@ -873,6 +878,20 @@ export default function ReviewRequestsPage() {
                 value={newNote}
                 onChange={(e) => setNewNote(e.target.value)}
               />
+            </div>
+
+            {/* Ask AI to review */}
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="aiRequested"
+                checked={aiRequested}
+                onChange={(e) => setAiRequested(e.target.checked)}
+                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <label htmlFor="aiRequested" className="text-[11px] font-medium text-slate-700 select-none">
+                Ask AI to review this resume
+              </label>
             </div>
 
             {/* Reviewer selection (private only) */}
@@ -1498,6 +1517,35 @@ function DetailView(props) {
   // show AI panel only if request asked for AI + backend says user can see it
   const showAiPanel = !!request.ai_requested && canSeeAiFeedback;
 
+  const handleExportPdf = () => {
+    if (!editorContent) return;
+    
+    // Create a temporary container for the PDF content
+    const element = document.createElement("div");
+    element.innerHTML = editorContent;
+    element.className = "prose prose-sm max-w-none"; 
+    
+    // Apply styles to match editor (A4)
+    element.style.width = "210mm";
+    element.style.minHeight = "297mm";
+    element.style.padding = "0.5mm 1mm";
+    element.style.fontFamily = "Arial, sans-serif";
+    element.style.fontSize = "9pt";
+    element.style.lineHeight = "1.5";
+    element.style.color = "#000";
+    element.style.background = "#fff";
+    
+    const opt = {
+      margin: 0,
+      filename: `resume_request_${request.request_id}.pdf`,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+    };
+    
+    html2pdf().set(opt).from(element).save();
+  };
+
   const handleSaveAsNewVersion = async () => {
     if (!request || !editorContent.trim()) {
       alert("Resume content is empty");
@@ -1664,13 +1712,20 @@ function DetailView(props) {
                     onChange={(newContent) => {
                       setEditorContent(newContent);
                     }}
+                    editable={isOwner}
                   />
                 </div>
               </div>
             </div>
 
             {isOwner && (
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={handleExportPdf}
+                  className="text-[11px] px-3 py-1.5 rounded-full bg-red-600 text-white hover:bg-red-700"
+                >
+                  Export to PDF
+                </button>
                 <button
                   onClick={handleSaveAsNewVersion}
                   className="text-[11px] px-3 py-1.5 rounded-full bg-slate-900 text-white hover:bg-slate-800"
@@ -1915,19 +1970,25 @@ function DetailView(props) {
           </div>
 
           <div className="bg-slate-100 rounded-md p-3 flex justify-center">
-            <div className="bg-white shadow-sm border border-slate-200 w-full max-w-[720px] h-[340px] overflow-y-auto rounded-md">
-              <textarea
-                className="w-full h-full p-4 text-xs leading-relaxed resize-none border-none outline-none"
-                value={editorContent}
-                onChange={(e) => setEditorContent(e.target.value)}
-                readOnly={!isOwner}
-                spellCheck={false}
-              />
+            <div className="bg-slate-100 w-full max-w-full overflow-auto rounded-md relative flex-1 h-[800px]">
+              <div className="w-full flex-1 relative">
+                <ResumeEditor
+                  content={editorContent}
+                  onChange={(newContent) => setEditorContent(newContent)}
+                  editable={isOwner}
+                />
+              </div>
             </div>
           </div>
 
           {isOwner && (
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={handleExportPdf}
+                className="text-[11px] px-3 py-1.5 rounded-full bg-red-600 text-white hover:bg-red-700"
+              >
+                Export to PDF
+              </button>
               <button
                 onClick={handleSaveAsNewVersion}
                 className="text-[11px] px-3 py-1.5 rounded-full bg-slate-900 text-white hover:bg-slate-800"

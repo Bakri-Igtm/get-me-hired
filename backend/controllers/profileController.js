@@ -31,6 +31,11 @@ export const getMyProfile = async (req, res) => {
       [educationRows],
       [experienceRows],
       [linkRows],
+      reviewCountObj,
+      requestCountObj,
+      [requestStatusRows],
+      [reviewRatingRows],
+      [badgeRules],
     ] = await Promise.all([
       pool.query(
         `SELECT education_id, school, degree, field_of_study, start_date, end_date,
@@ -55,7 +60,58 @@ export const getMyProfile = async (req, res) => {
           ORDER BY display_order ASC, link_id DESC`,
         [userId]
       ),
+      // Count reviews
+      pool.query(`SELECT COUNT(*) AS reviewCount FROM review WHERE user_id = ?`, [userId]).then(([rows]) => rows[0]),
+      // Count requests
+      pool.query(`SELECT COUNT(*) AS requestCount FROM review_request WHERE requester_id = ?`, [userId]).then(([rows]) => rows[0]),
+      // Request status breakdown
+      pool.query(`SELECT status, COUNT(*) as count FROM review_request WHERE requester_id = ? GROUP BY status`, [userId]),
+      // Review rating breakdown
+      pool.query(`SELECT review_rating, COUNT(*) as count FROM review WHERE user_id = ? GROUP BY review_rating`, [userId]),
+      // Get badge rules
+      pool.query(`SELECT * FROM badge`),
     ]);
+
+    const reviewCount = parseInt(reviewCountObj?.reviewCount || 0, 10);
+    const requestCount = parseInt(requestCountObj?.requestCount || 0, 10);
+    
+    // Format breakdowns
+    const requestStatus = {};
+    (requestStatusRows || []).forEach(r => { requestStatus[r.status] = r.count; });
+
+    const reviewRatings = {};
+    (reviewRatingRows || []).forEach(r => { reviewRatings[r.review_rating] = r.count; });
+
+    // Calculate Badges
+    const earnedBadges = [];
+    const userType = userRows[0].user_type;
+
+    // 1. Review Badge (Everyone can earn, but specifically mentioned for Reviewers)
+    const reviewBadges = badgeRules
+      .filter((b) => reviewCount >= b.review_count) // e.g. 20 >= 0 (Rookie), 20 < 50 (Sergeant)
+      .sort((a, b) => b.review_count - a.review_count); // Descending
+
+    if (reviewBadges.length > 0) {
+      // Take the highest one
+      earnedBadges.push({ ...reviewBadges[0], category: "Reviewer Badge" });
+    } else {
+      // Default to Rookie if no badge earned
+      earnedBadges.push({ badge_name: "Rookie", category: "Reviewer Badge" });
+    }
+
+    // 2. Request Badge (Only Requesters)
+    if (userType === "RQ") {
+      const requestBadges = badgeRules
+        .filter((b) => requestCount >= b.request_count)
+        .sort((a, b) => b.request_count - a.request_count);
+
+      if (requestBadges.length > 0) {
+        earnedBadges.push({ ...requestBadges[0], category: "Requester Badge" });
+      } else {
+        // Default to Rookie if no badge earned
+        earnedBadges.push({ badge_name: "Rookie", category: "Requester Badge" });
+      }
+    }
 
     return res.json({
       user: userRows[0],
@@ -63,7 +119,13 @@ export const getMyProfile = async (req, res) => {
       education: educationRows,
       experience: experienceRows,
       links: linkRows,
-      // (projects, certs, awards, skills) — add later similarly
+      badges: earnedBadges,
+      stats: { 
+        reviewCount, 
+        requestCount,
+        requestStatus,
+        reviewRatings
+      },
     });
   } catch (err) {
     console.error("getMyProfile error:", err);
@@ -338,6 +400,9 @@ export const getPublicProfile = async (req, res) => {
       [educationRows],
       [experienceRows],
       [linkRows],
+      reviewCountObj,
+      requestCountObj,
+      [badgeRules],
     ] = await Promise.all([
       pool.query(
         `SELECT education_id, school, degree, field_of_study, start_date, end_date,
@@ -362,7 +427,41 @@ export const getPublicProfile = async (req, res) => {
           ORDER BY display_order ASC, link_id DESC`,
         [userId]
       ),
+      pool.query(`SELECT COUNT(*) AS reviewCount FROM review WHERE user_id = ?`, [userId]).then(([rows]) => rows[0]),
+      pool.query(`SELECT COUNT(*) AS requestCount FROM review_request WHERE requester_id = ?`, [userId]).then(([rows]) => rows[0]),
+      pool.query(`SELECT * FROM badge`),
     ]);
+
+    const reviewCount = parseInt(reviewCountObj?.reviewCount || 0, 10);
+    const requestCount = parseInt(requestCountObj?.requestCount || 0, 10);
+
+    // Calculate Badges
+    const earnedBadges = [];
+    const userType = userRows[0].user_type;
+
+    // 1. Review Badge
+    const reviewBadges = badgeRules
+      .filter((b) => reviewCount >= b.review_count)
+      .sort((a, b) => b.review_count - a.review_count);
+
+    if (reviewBadges.length > 0) {
+      earnedBadges.push({ ...reviewBadges[0], category: "Reviewer Badge" });
+    } else {
+      earnedBadges.push({ badge_name: "Rookie", category: "Reviewer Badge" });
+    }
+
+    // 2. Request Badge (Only Requesters)
+    if (userType === "RQ") {
+      const requestBadges = badgeRules
+        .filter((b) => requestCount >= b.request_count)
+        .sort((a, b) => b.request_count - a.request_count);
+
+      if (requestBadges.length > 0) {
+        earnedBadges.push({ ...requestBadges[0], category: "Requester Badge" });
+      } else {
+        earnedBadges.push({ badge_name: "Rookie", category: "Requester Badge" });
+      }
+    }
 
     return res.json({
       user: userRows[0],
@@ -370,6 +469,8 @@ export const getPublicProfile = async (req, res) => {
       education: educationRows,
       experience: experienceRows,
       links: linkRows,
+      badges: earnedBadges,
+      stats: { reviewCount, requestCount },
     });
   } catch (err) {
     console.error("getPublicProfile error:", err);

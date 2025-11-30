@@ -1,5 +1,6 @@
 // src/components/Sidebar.jsx
 import { NavLink } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
 import {
   Home,
   Users,
@@ -10,12 +11,16 @@ import {
 } from "lucide-react";
 
 export default function Sidebar({ onNavigate }) {
+  const { user } = useAuth();
+
   const menuItems = [
     { name: "Home", icon: Home, path: "/dashboard" },
     { name: "Directory", icon: Users, path: "/directory" },
     { name: "Review Requests", icon: ClipboardList, path: "/review-requests" },
-    // ✅ New "My Resumes" item, before Profile
-    { name: "My Resumes", icon: FileText, path: "/my-resumes" },
+    // Show "My Resumes" only if NOT a reviewer
+    ...(user?.user_type !== "RR"
+      ? [{ name: "My Resumes", icon: FileText, path: "/my-resumes" }]
+      : []),
     { name: "Prizes", icon: Trophy, path: "/prizes" },
     { name: "Profile", icon: User, path: "/profile" },
   ];

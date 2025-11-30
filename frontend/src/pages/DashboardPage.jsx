@@ -1,7 +1,139 @@
 import { useEffect, useState } from "react";
-import api from "../api/axios.js";
-import { getLeaderboard } from "../api/profile.js";
+import { Link } from "react-router-dom";
+import { getLeaderboard, getMyProfile } from "../api/profile.js";
 import { useAuth } from "../context/AuthContext.jsx";
+import { Shield, Award, Medal, Star, Trophy, Target, Crown, Zap, CheckCircle, Clock, Edit3, Search, FileText } from "lucide-react";
+
+const BADGE_ICONS = {
+  "Rookie": Shield,
+  "Sergeant": Zap,
+  "Lieutenant": Star,
+  "Captain": Target,
+  "General": Award,
+  "Major General": Medal,
+  "Commander": Trophy,
+  "Legend": Crown
+};
+
+// --- Components ---
+
+function PieChart({ data, colors }) {
+  // data: { "Label": value, ... }
+  // colors: { "Label": "#hex", ... }
+  
+  const total = Object.values(data).reduce((a, b) => a + b, 0);
+  if (total === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-32 text-xs text-slate-400 bg-slate-50 rounded-full aspect-square mx-auto">
+        No data
+      </div>
+    );
+  }
+
+  let currentAngle = 0;
+  const segments = Object.entries(data).map(([label, value]) => {
+    const percentage = (value / total) * 100;
+    const angle = (value / total) * 360;
+    const color = colors[label] || "#cbd5e1";
+    const segment = `${color} ${currentAngle}deg ${currentAngle + angle}deg`;
+    currentAngle += angle;
+    return segment;
+  });
+
+  const gradient = `conic-gradient(${segments.join(", ")})`;
+
+  return (
+    <div className="flex items-center gap-4">
+      <div 
+        className="w-24 h-24 rounded-full shrink-0 border-4 border-white shadow-sm"
+        style={{ background: gradient }}
+      />
+      <div className="space-y-1">
+        {Object.entries(data).map(([label, value]) => (
+          <div key={label} className="flex items-center gap-2 text-xs">
+            <span className="w-2 h-2 rounded-full" style={{ background: colors[label] || "#cbd5e1" }} />
+            <span className="text-slate-600">{label}:</span>
+            <span className="font-medium text-slate-900">{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProfileCompleteness({ profile, education, experience }) {
+  // Simple heuristic
+  let score = 0;
+  const checks = [
+    { label: "Avatar", done: !!profile?.avatar_url, pts: 10 },
+    { label: "Headline", done: !!profile?.headline, pts: 20 },
+    { label: "Summary", done: !!profile?.summary, pts: 20 },
+    { label: "Education", done: education?.length > 0, pts: 25 },
+    { label: "Experience", done: experience?.length > 0, pts: 25 },
+  ];
+
+  checks.forEach(c => { if (c.done) score += c.pts; });
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="font-semibold text-slate-900">Profile Strength</h2>
+        <span className="text-xs font-bold text-emerald-600">{score}%</span>
+      </div>
+      <div className="w-full bg-slate-100 rounded-full h-2 mb-3">
+        <div 
+          className="bg-emerald-500 h-2 rounded-full transition-all duration-500" 
+          style={{ width: `${score}%` }} 
+        />
+      </div>
+      <div className="space-y-1">
+        {checks.map((c) => (
+          <div key={c.label} className="flex items-center gap-2 text-xs">
+            {c.done ? (
+              <CheckCircle className="w-3 h-3 text-emerald-500" />
+            ) : (
+              <div className="w-3 h-3 rounded-full border border-slate-300" />
+            )}
+            <span className={c.done ? "text-slate-700" : "text-slate-400"}>{c.label}</span>
+          </div>
+        ))}
+      </div>
+      {score < 100 && (
+        <Link to="/profile" className="block mt-3 text-center text-xs text-blue-600 hover:underline">
+          Complete your profile →
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function QuickActions({ userType }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+      <h2 className="font-semibold text-slate-900 mb-3">Quick Actions</h2>
+      <div className="grid grid-cols-2 gap-2">
+        {userType !== "RR" && (
+          <Link to="/my-resumes" className="flex flex-col items-center justify-center p-3 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors">
+            <FileText className="w-5 h-5 text-slate-600 mb-1" />
+            <span className="text-xs font-medium text-slate-700">My Resumes</span>
+          </Link>
+        )}
+        <Link to="/directory" className="flex flex-col items-center justify-center p-3 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors">
+          <Search className="w-5 h-5 text-slate-600 mb-1" />
+          <span className="text-xs font-medium text-slate-700">Find Person</span>
+        </Link>
+        <Link to="/profile" className="flex flex-col items-center justify-center p-3 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors">
+          <Edit3 className="w-5 h-5 text-slate-600 mb-1" />
+          <span className="text-xs font-medium text-slate-700">Edit Profile</span>
+        </Link>
+        <Link to="/review-requests" className="flex flex-col items-center justify-center p-3 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors">
+          <Clock className="w-5 h-5 text-slate-600 mb-1" />
+          <span className="text-xs font-medium text-slate-700">My Requests</span>
+        </Link>
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -21,60 +153,17 @@ export default function DashboardPage() {
 
   const userId = user?.userId || user?.id || user?.user_id;
 
-  // All resumes for this user
-  const [resumes, setResumes] = useState([]);
-  const [resumesLoading, setResumesLoading] = useState(true);
-  const [resumesError, setResumesError] = useState("");
-
-  // Versions for currently expanded resume
-  const [expandedResumeId, setExpandedResumeId] = useState(null);
-  const [versions, setVersions] = useState([]);
-  const [versionsLoading, setVersionsLoading] = useState(false);
-  const [versionsError, setVersionsError] = useState("");
-
-  // Selected version detail
-  const [selectedVersion, setSelectedVersion] = useState(null);
-  const [versionContent, setVersionContent] = useState("");
-  const [versionLoading, setVersionLoading] = useState(false);
-  const [versionError, setVersionError] = useState("");
-
-  // Edit mode
-  const [isEditingContent, setIsEditingContent] = useState(false);
-  const [editingContent, setEditingContent] = useState("");
-  const [savingContent, setSavingContent] = useState(false);
-  const [saveError, setSaveError] = useState("");
-
-  // AI feedback & human reviews
-  const [aiFeedback, setAiFeedback] = useState(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState("");
-
-  const [reviews, setReviews] = useState([]);
-  const [reviewsLoading, setReviewsLoading] = useState(false);
-  const [reviewsError, setReviewsError] = useState("");
-
   // Leaderboard
   const [leaderboard, setLeaderboard] = useState({ requesters: [], reviewers: [] });
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
 
-  // ---------------- FETCH RESUMES ----------------
-  useEffect(() => {
-    const fetchResumes = async () => {
-      setResumesLoading(true);
-      setResumesError("");
-      try {
-        const res = await api.get("/api/resumes/mine");
-        setResumes(res.data.resumes || []);
-      } catch (err) {
-        console.error("Error fetching resumes:", err);
-        setResumesError(
-          err.response?.data?.message || "Could not load your resumes."
-        );
-      } finally {
-        setResumesLoading(false);
-      }
-    };
+  // Profile Stats & Badges
+  const [myProfile, setMyProfile] = useState(null);
+  const [education, setEducation] = useState([]);
+  const [experience, setExperience] = useState([]);
 
+  // ---------------- FETCH DATA ----------------
+  useEffect(() => {
     const fetchLeaderboard = async () => {
       setLeaderboardLoading(true);
       try {
@@ -87,437 +176,184 @@ export default function DashboardPage() {
       }
     };
 
-    fetchResumes();
+    const fetchProfileData = async () => {
+      try {
+        const { data } = await getMyProfile();
+        setMyProfile(data);
+        setEducation(data.education || []);
+        setExperience(data.experience || []);
+      } catch (err) {
+        console.error("Error fetching profile:", err);
+      }
+    };
+
     fetchLeaderboard();
+    fetchProfileData();
   }, []);
-
-  // ---------------- HANDLERS: RESUMES & VERSIONS ----------------
-  const handleResumeClick = async (resumeId) => {
-    if (expandedResumeId === resumeId) {
-      // collapse
-      setExpandedResumeId(null);
-      setVersions([]);
-      setSelectedVersion(null);
-      setVersionContent("");
-      setVersionError("");
-      setAiFeedback(null);
-      setAiError("");
-      setReviews([]);
-      return;
-    }
-
-    setExpandedResumeId(resumeId);
-    setVersions([]);
-    setSelectedVersion(null);
-    setVersionContent("");
-    setVersionError("");
-    setAiFeedback(null);
-    setAiError("");
-    setReviews([]);
-    setVersionsLoading(true);
-    setVersionsError("");
-
-    try {
-      const res = await api.get(`/api/resumes/${resumeId}/versions`);
-      setVersions(res.data || []);
-    } catch (err) {
-      console.error("Error fetching versions:", err);
-      setVersionsError(
-        err.response?.data?.message ||
-          "Could not load versions for this resume."
-      );
-    } finally {
-      setVersionsLoading(false);
-    }
-  };
-
-  const loadVersionDetails = async (versionId) => {
-    setVersionLoading(true);
-    setVersionError("");
-    setVersionContent("");
-    setAiFeedback(null);
-    setAiError("");
-    setReviews([]);
-    setReviewsError("");
-
-    try {
-      const [contentRes, feedbackRes, reviewsRes] = await Promise.allSettled([
-        api.get(`/api/resumes/content/${versionId}`),
-        api.get(`/api/ai-feedback/version/${versionId}`),
-        api.get(`/api/reviews/version/${versionId}`),
-      ]);
-
-      // Content
-      if (
-        contentRes.status === "fulfilled" &&
-        contentRes.value?.data?.content
-      ) {
-        setVersionContent(contentRes.value.data.content);
-      } else {
-        setVersionContent("");
-        if (contentRes.status === "rejected") {
-          setVersionError(
-            contentRes.reason?.response?.data?.message ||
-              "Could not load resume content."
-          );
-        }
-      }
-
-      // AI Feedback (optional)
-      if (
-        feedbackRes.status === "fulfilled" &&
-        feedbackRes.value?.data?.feedback
-      ) {
-        setAiFeedback(feedbackRes.value.data.feedback);
-      } else {
-        setAiFeedback(null);
-      }
-
-      // Human reviews (optional)
-      if (
-        reviewsRes.status === "fulfilled" &&
-        Array.isArray(reviewsRes.value.data)
-      ) {
-        setReviews(reviewsRes.value.data);
-      } else {
-        setReviews([]);
-      }
-    } catch (err) {
-      console.error("Error loading version details:", err);
-      setVersionError(
-        err.response?.data?.message || "Error loading version details."
-      );
-    } finally {
-      setVersionLoading(false);
-      setReviewsLoading(false);
-      setAiLoading(false);
-    }
-  };
-
-  const handleVersionClick = async (version) => {
-    setSelectedVersion(version);
-    setIsEditingContent(false);
-    setSaveError("");
-    await loadVersionDetails(version.resume_versions_id);
-  };
-
-  const handleEditContent = () => {
-    setIsEditingContent(true);
-    setEditingContent(versionContent);
-    setSaveError("");
-  };
-
-  const handleCancelEdit = () => {
-    setIsEditingContent(false);
-    setEditingContent("");
-    setSaveError("");
-  };
-
-  const handleSaveContent = async () => {
-    if (!selectedVersion) return;
-    
-    setSavingContent(true);
-    setSaveError("");
-    try {
-      await api.patch(`/api/resumes/content/${selectedVersion.resume_versions_id}`, {
-        content: editingContent,
-      });
-      setVersionContent(editingContent);
-      setIsEditingContent(false);
-      setEditingContent("");
-    } catch (err) {
-      console.error("Error saving content:", err);
-      setSaveError(
-        err.response?.data?.message || "Error saving content."
-      );
-    } finally {
-      setSavingContent(false);
-    }
-  };
-
-  // ---------------- HANDLERS: AI FEEDBACK ----------------
-  const handleGenerateFeedback = async () => {
-    if (!selectedVersion) return;
-
-    setAiLoading(true);
-    setAiError("");
-    try {
-      const res = await api.post("/api/ai-feedback/generate", {
-        resumeVersionsId: selectedVersion.resume_versions_id,
-      });
-        setAiFeedback(res.data.feedback);
-    } catch (err) {
-      console.error("Error generating AI feedback:", err);
-      setAiError(
-        err.response?.data?.message || "Error generating AI feedback."
-      );
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const handleReloadComments = async () => {
-    if (!selectedVersion) return;
-    await loadVersionDetails(selectedVersion.resume_versions_id);
-  };
 
   // ---------------- UI ----------------
   return (
-    <div className="mt-6">
-      Greeting
-      <section className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900 mb-1">
-          Hey {user.firstName} 👋
-        </h1>
-        <p className="text-sm text-slate-600">
-          You&apos;re logged in as{" "}
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900 text-slate-50 text-xs font-medium">
-            {userTypeLabel}
-          </span>
-        </p>
+    <div className="mt-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">
+            Hey, {user.firstName} 👋
+          </h1>
+          <p className="text-slate-600 mt-1">
+            Welcome back to your dashboard.
+          </p>
+        </div>
+        <span className="px-4 py-1.5 rounded-full bg-slate-900 text-slate-50 text-sm font-medium shadow-sm">
+          {userTypeLabel}
+        </span>
       </section>
 
-      {/* 2-column grid: Left (account + leaderboard) / Right (resumes + detail) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-        {/* LEFT COLUMN — Account + Leaderboard */}
-        <div className="lg:col-span-1 lg:sticky lg:top-20">
-          <div className="space-y-6 xl:space-y-0 xl:grid xl:grid-cols-2 xl:gap-4">
-            {/* Account card */}
-            <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-              <h2 className="font-semibold text-slate-900 mb-2">Account</h2>
-              <p className="text-xs text-slate-500 mb-1">
-                Name:{" "}
-                <span className="font-medium">
-                  {user.firstName} {user.lastName}
-                </span>
-              </p>
-              <p className="text-xs text-slate-500 mb-1">
-                Email: <span className="font-mono">{user.email}</span>
-              </p>
-              <p className="text-[11px] text-slate-400 mt-2">
-                We&apos;ll expand this later with profile details, badges, and stats.
-              </p>
-            </section>
-
-            {/* Leaderboard card */}
-            <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-              <h2 className="font-semibold text-slate-900 mb-2">Leaderboard</h2>
-              <p className="text-xs text-slate-500 mb-2">
-                Top contributors in the community.
-              </p>
-              
-              {leaderboardLoading ? (
-                <p className="text-xs text-slate-500">Loading leaderboard...</p>
-              ) : (
-                <div className="space-y-4">
-                  {leaderboard.requesters && leaderboard.requesters.length > 0 && (
-                    <div>
-                      <h3 className="text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Top Requesters</h3>
-                      <ul className="space-y-1">
-                        {leaderboard.requesters.map((u, i) => (
-                          <li key={u.user_id} className="flex justify-between text-xs text-slate-600">
-                            <span>{i + 1}. {u.user_fname} {u.user_lname}</span>
-                            <span className="font-mono font-medium text-slate-900">{u.points} pts</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {leaderboard.reviewers && leaderboard.reviewers.length > 0 && (
-                    <div>
-                      <h3 className="text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Top Reviewers</h3>
-                      <ul className="space-y-1">
-                        {leaderboard.reviewers.map((u, i) => (
-                          <li key={u.user_id} className="flex justify-between text-xs text-slate-600">
-                            <span>{i + 1}. {u.user_fname} {u.user_lname}</span>
-                            <span className="font-mono font-medium text-slate-900">{u.points} pts</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {(!leaderboard.requesters?.length && !leaderboard.reviewers?.length) && (
-                     <p className="text-xs text-slate-400 italic">No leaderboard data available yet.</p>
-                  )}
-                </div>
-              )}
-            </section>
+      {/* Main Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
+        
+        {/* 1. Account Info */}
+        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col justify-center">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-2xl font-bold text-slate-700">
+              {user.firstName[0]}
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">{user.firstName} {user.lastName}</h2>
+              <p className="text-sm text-slate-500 font-mono">{user.email}</p>
+              <Link to="/profile" className="text-xs text-blue-600 hover:underline mt-1 inline-block">
+                View Profile
+              </Link>
+            </div>
           </div>
         </div>
 
-        {/* RIGHT COLUMN — Version detail (No more resumes list) */}
-        <div className="space-y-6">
-          {/* Version detail: content + feedback + comments */}
-          {selectedVersion && (
-            <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
-                <div>
-                  <h2 className="font-semibold text-slate-900">
-                    Resume Version Detail
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Viewing version {selectedVersion.version_name || `Version ${selectedVersion.version_number}`} (
-                    {selectedVersion.resume_versions_id})
-                  </p>
+        {/* 2. Stats & Badges */}
+        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col justify-between">
+          <div>
+            <h2 className="font-semibold text-slate-900 mb-3">Your Impact</h2>
+            <div className={`grid gap-4 ${rawType === "RR" ? "grid-cols-1" : "grid-cols-2"}`}>
+              {/* Reviews Column */}
+              <div className="flex flex-col gap-2">
+                <div className="bg-slate-50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-slate-900">{myProfile?.stats?.reviewCount || 0}</p>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">Reviews</p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={handleGenerateFeedback}
-                    disabled={aiLoading}
-                    className="px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50"
-                  >
-                    {aiLoading ? "Working..." : "Generate AI feedback"}
-                  </button>
-                  <button
-                    onClick={handleReloadComments}
-                    disabled={versionLoading}
-                    className="px-3 py-1.5 rounded-full text-xs font-medium bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
-                  >
-                    Reload content & comments
-                  </button>
+                <div className="flex justify-center min-h-[28px]">
+                  {(() => {
+                    const badge = myProfile?.badges?.find(b => b.category === "Reviewer Badge");
+                    if (badge) {
+                      const Icon = BADGE_ICONS[badge.badge_name] || Shield;
+                      return (
+                        <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-100 text-amber-700 rounded-full px-3 py-1" title={badge.category}>
+                          <Icon className="w-3.5 h-3.5" />
+                          <span className="text-xs font-bold">{badge.badge_name}</span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
 
-              {/* CONTENT */}
-              <div className="mb-4">
-                <h3 className="text-sm font-semibold text-slate-900 mb-1">
-                  Resume content
-                </h3>
-                {versionLoading ? (
-                  <p className="text-sm text-slate-500">Loading content...</p>
-                ) : versionError ? (
-                  <p className="text-sm text-red-500">{versionError}</p>
-                ) : (
-                  <div>
-                    {isEditingContent ? (
-                      <div className="space-y-2">
-                        <textarea
-                          value={editingContent}
-                          onChange={(e) => setEditingContent(e.target.value)}
-                          className="w-full h-64 p-3 border border-slate-300 rounded-md font-mono text-xs"
-                          placeholder="Edit resume content..."
-                        />
-                        {saveError && (
-                          <p className="text-xs text-red-500">{saveError}</p>
-                        )}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={handleSaveContent}
-                            disabled={savingContent}
-                            className="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
-                          >
-                            {savingContent ? "Saving..." : "Save"}
-                          </button>
-                          <button
-                            onClick={handleCancelEdit}
-                            disabled={savingContent}
-                            className="px-3 py-1.5 text-xs rounded bg-slate-300 text-slate-700 hover:bg-slate-400"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="border border-slate-200 rounded-md bg-slate-50 max-h-64 overflow-y-auto p-3">
-                          {versionContent ? (
-                            <pre className="whitespace-pre-wrap break-words text-xs text-slate-800 font-mono">
-                              {versionContent}
-                            </pre>
-                          ) : (
-                            <p className="text-xs text-slate-500">
-                              No content stored for this version.
-                            </p>
-                          )}
-                        </div>
-                        <button
-                          onClick={handleEditContent}
-                          className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
-                        >
-                          Edit Content
-                        </button>
-                      </div>
-                    )}
+              {/* Requests Column - Hidden for Reviewers */}
+              {rawType !== "RR" && (
+                <div className="flex flex-col gap-2">
+                  <div className="bg-slate-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-slate-900">{myProfile?.stats?.requestCount || 0}</p>
+                    <p className="text-xs text-slate-500 uppercase tracking-wide">Requests</p>
                   </div>
-                )}
-              </div>
-
-              {/* FEEDBACK & COMMENTS */}
-              <div>
-                <h3 className="text-sm font-semibold text-slate-900 mb-2">
-                  Feedback & comments
-                </h3>
-
-                {aiError && (
-                  <p className="text-xs text-red-500 mb-2">{aiError}</p>
-                )}
-
-                {/* AI feedback as first comment */}
-                {aiFeedback && (
-                  <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-semibold text-emerald-700">
-                        AI Feedback
-                      </span>
-                      {typeof aiFeedback?.summary?.score === "number" && (
-                        <span className="text-[11px] font-mono text-emerald-700">
-                          Score: {aiFeedback.summary.score}/100
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-slate-800 mb-2">
-                      {aiFeedback.summary?.overall}
-                    </p>
-                  </div>
-                )}
-
-                {/* Human reviews */}
-                <div className="space-y-2">
-                  {reviewsLoading ? (
-                    <p className="text-xs text-slate-500">
-                      Loading reviews...
-                    </p>
-                  ) : reviewsError ? (
-                    <p className="text-xs text-red-500">{reviewsError}</p>
-                  ) : reviews.length === 0 ? (
-                    <p className="text-xs text-slate-500">
-                      No human reviews yet.
-                    </p>
-                  ) : (
-                    reviews.map((rev) => (
-                      <div
-                        key={rev.review_id}
-                        className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-slate-800">
-                              {rev.reviewer_name || "Reviewer"}
-                            </span>
-                            {rev.user_type && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wide bg-slate-900 text-slate-50">
-                                {rev.user_type}
-                              </span>
-                            )}
+                  <div className="flex justify-center min-h-[28px]">
+                    {(() => {
+                      const badge = myProfile?.badges?.find(b => b.category === "Requester Badge");
+                      if (badge) {
+                        const Icon = BADGE_ICONS[badge.badge_name] || Shield;
+                        return (
+                          <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-100 text-amber-700 rounded-full px-3 py-1" title={badge.category}>
+                            <Icon className="w-3.5 h-3.5" />
+                            <span className="text-xs font-bold">{badge.badge_name}</span>
                           </div>
-                          {typeof rev.review_rating === "number" && (
-                            <span className="text-[11px] text-amber-600">
-                              ★ {rev.review_rating}/5
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-slate-700">
-                          {rev.comment_text || rev.review_comment}
-                        </p>
-                      </div>
-                    ))
-                  )}
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Profile Strength */}
+        <ProfileCompleteness 
+          profile={myProfile?.profile} 
+          education={education} 
+          experience={experience} 
+        />
+
+        {/* 4. Quick Actions */}
+        <QuickActions userType={rawType} />
+
+        {/* 5. Activity Chart */}
+        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+          <h2 className="font-semibold text-slate-900 mb-4">
+            {rawType === "RQ" ? "Request Status" : "Review Ratings"}
+          </h2>
+          <div className="flex justify-center">
+            {rawType === "RQ" ? (
+              <PieChart 
+                data={myProfile?.stats?.requestStatus || {}} 
+                colors={{ "pending": "#f59e0b", "accepted": "#3b82f6", "resolved": "#10b981", "cancelled": "#ef4444" }} 
+              />
+            ) : (
+              <PieChart 
+                data={myProfile?.stats?.reviewRatings || {}} 
+                colors={{ "5": "#10b981", "4": "#34d399", "3": "#f59e0b", "2": "#f97316", "1": "#ef4444" }} 
+              />
+            )}
+          </div>
+        </div>
+
+        {/* 6. Leaderboard */}
+        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm md:col-span-2 xl:col-span-1">
+          <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-amber-500" />
+            Leaderboard
+          </h2>
+           {leaderboardLoading ? (
+              <p className="text-sm text-slate-500">Loading...</p>
+            ) : (
+              <div className="space-y-6">
+                {leaderboard.requesters?.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Top Requesters</h3>
+                    <ul className="space-y-2">
+                      {leaderboard.requesters.slice(0, 3).map((u, i) => (
+                        <li key={u.user_id} className="flex justify-between text-sm">
+                          <span className="text-slate-700">{i + 1}. {u.user_fname} {u.user_lname}</span>
+                          <span className="font-mono font-bold text-slate-900">{u.points}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {leaderboard.reviewers?.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Top Reviewers</h3>
+                    <ul className="space-y-2">
+                      {leaderboard.reviewers.slice(0, 3).map((u, i) => (
+                        <li key={u.user_id} className="flex justify-between text-sm">
+                          <span className="text-slate-700">{i + 1}. {u.user_fname} {u.user_lname}</span>
+                          <span className="font-mono font-bold text-slate-900">{u.points}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {(!leaderboard.requesters?.length && !leaderboard.reviewers?.length) && (
+                   <p className="text-sm text-slate-400 italic">No leaderboard data available yet.</p>
+                )}
               </div>
-            </section>
-          )}
+            )}
         </div>
       </div>
     </div>

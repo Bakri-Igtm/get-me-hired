@@ -3,6 +3,18 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getPublicProfile } from "../api/profile";
 import { useAuth } from "../context/AuthContext.jsx";
+import { Shield, Award, Medal, Star, Trophy, Target, Crown, Zap } from "lucide-react";
+
+const BADGE_ICONS = {
+  "Rookie": Shield,
+  "Sergeant": Zap,
+  "Lieutenant": Star,
+  "Captain": Target,
+  "General": Award,
+  "Major General": Medal,
+  "Commander": Trophy,
+  "Legend": Crown
+};
 
 function formatMonthYear(d) {
   if (!d) return "?";
@@ -32,6 +44,8 @@ export default function PublicMemberPage() {
   const [education, setEducation] = useState([]);
   const [experience, setExperience] = useState([]);
   const [links, setLinks] = useState([]);
+  const [badges, setBadges] = useState([]);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -45,6 +59,8 @@ export default function PublicMemberPage() {
         setEducation(data.education || []);
         setExperience(data.experience || []);
         setLinks(data.links || []);
+        setBadges(data.badges || []);
+        setStats(data.stats || null);
         setErr("");
       } catch (e) {
         console.error(e);
@@ -102,6 +118,22 @@ export default function PublicMemberPage() {
                   {roleLabel(member.user_type)}
                 </span>
               </h1>
+              
+              {/* Badges */}
+              {badges.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {badges.map((badge, idx) => {
+                    const Icon = BADGE_ICONS[badge.badge_name] || Shield;
+                    return (
+                      <div key={idx} className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-full px-2 py-1" title={badge.category}>
+                        <Icon className="w-3 h-3 text-amber-500" />
+                        <span className="text-[10px] font-medium text-slate-700">{badge.badge_name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               <p className="text-sm text-slate-600 mt-1">
                 {profile?.headline || "No headline yet."}
               </p>

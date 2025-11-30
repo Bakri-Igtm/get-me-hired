@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
+import { Shield, Award, Medal, Star, Trophy, Target, Crown, Zap } from "lucide-react";
 import {
   getMyProfile,
   saveProfile,
@@ -10,6 +11,17 @@ import {
   addLink,
   deleteLink,
 } from "../api/profile";
+
+const BADGE_ICONS = {
+  "Rookie": Shield,
+  "Sergeant": Zap,
+  "Lieutenant": Star,
+  "Captain": Target,
+  "General": Award,
+  "Major General": Medal,
+  "Commander": Trophy,
+  "Legend": Crown
+};
 
 function formatMonthYear(d) {
   if (!d) return "?";
@@ -49,6 +61,7 @@ export default function ProfilePage() {
   const [education, setEducation] = useState([]);
   const [experience, setExperience] = useState([]);
   const [links, setLinks] = useState([]);
+  const [badges, setBadges] = useState([]);
 
   // toggles for “add” questionnaires
   const [showEditCore, setShowEditCore] = useState(false); // edit headline/links
@@ -99,6 +112,7 @@ export default function ProfilePage() {
         setEducation(data.education || []);
         setExperience(data.experience || []);
         setLinks(data.links || []);
+        setBadges(data.badges || []);
         setErr("");
       } catch (e) {
         console.error(e);
@@ -239,6 +253,15 @@ export default function ProfilePage() {
                     : user.user_type}
                 </span>
             )}
+            {badges.map((badge, idx) => {
+                const Icon = BADGE_ICONS[badge.badge_name] || Shield;
+                return (
+                  <div key={idx} className="flex items-center gap-1 bg-amber-50 border border-amber-100 text-amber-700 rounded-full px-2 py-0.5" title={badge.category}>
+                    <Icon className="w-3 h-3" />
+                    <span className="text-[10px] font-bold">{badge.badge_name}</span>
+                  </div>
+                );
+            })}
             </h1>
 
 

@@ -5,8 +5,9 @@ import Underline from "@tiptap/extension-underline";
 import Highlight from "@tiptap/extension-highlight";
 import { useEffect, useImperativeHandle, forwardRef } from "react";
 
-const ResumeEditor = forwardRef(function ResumeEditor({ content, onChange }, ref) {
+const ResumeEditor = forwardRef(function ResumeEditor({ content, onChange, editable = true }, ref) {
   const editor = useEditor({
+    editable,
     extensions: [
       StarterKit,
       Link.configure({
@@ -117,197 +118,199 @@ const ResumeEditor = forwardRef(function ResumeEditor({ content, onChange }, ref
   return (
     <div className="flex flex-col h-full border border-slate-300 rounded-md overflow-hidden bg-white">
       {/* Toolbar */}
-      <div className="flex flex-wrap gap-1 bg-slate-50 border-b border-slate-300 p-2">
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          disabled={!editor.can().chain().focus().toggleBold().run()}
-          className={`px-2 py-1 rounded text-xs font-semibold ${
-            editor.isActive("bold")
-              ? "bg-slate-900 text-white"
-              : "bg-white border border-slate-300 hover:bg-slate-100"
-          }`}
-        >
-          B
-        </button>
+      {editable && (
+        <div className="flex flex-wrap gap-1 bg-slate-50 border-b border-slate-300 p-2">
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleBold().run()}
+            disabled={!editor.can().chain().focus().toggleBold().run()}
+            className={`px-2 py-1 rounded text-xs font-semibold ${
+              editor.isActive("bold")
+                ? "bg-slate-900 text-white"
+                : "bg-white border border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            B
+          </button>
 
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          disabled={!editor.can().chain().focus().toggleItalic().run()}
-          className={`px-2 py-1 rounded text-xs italic ${
-            editor.isActive("italic")
-              ? "bg-slate-900 text-white"
-              : "bg-white border border-slate-300 hover:bg-slate-100"
-          }`}
-        >
-          I
-        </button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+            disabled={!editor.can().chain().focus().toggleItalic().run()}
+            className={`px-2 py-1 rounded text-xs italic ${
+              editor.isActive("italic")
+                ? "bg-slate-900 text-white"
+                : "bg-white border border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            I
+          </button>
 
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleUnderline().run()}
-          disabled={!editor.can().chain().focus().toggleUnderline().run()}
-          className={`px-2 py-1 rounded text-xs underline ${
-            editor.isActive("underline")
-              ? "bg-slate-900 text-white"
-              : "bg-white border border-slate-300 hover:bg-slate-100"
-          }`}
-        >
-          U
-        </button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+            disabled={!editor.can().chain().focus().toggleUnderline().run()}
+            className={`px-2 py-1 rounded text-xs underline ${
+              editor.isActive("underline")
+                ? "bg-slate-900 text-white"
+                : "bg-white border border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            U
+          </button>
 
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleStrike().run()}
-          disabled={!editor.can().chain().focus().toggleStrike().run()}
-          className={`px-2 py-1 rounded text-xs line-through ${
-            editor.isActive("strike")
-              ? "bg-slate-900 text-white"
-              : "bg-white border border-slate-300 hover:bg-slate-100"
-          }`}
-        >
-          S
-        </button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleStrike().run()}
+            disabled={!editor.can().chain().focus().toggleStrike().run()}
+            className={`px-2 py-1 rounded text-xs line-through ${
+              editor.isActive("strike")
+                ? "bg-slate-900 text-white"
+                : "bg-white border border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            S
+          </button>
 
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().setHorizontalRule().run()}
-          className="px-2 py-1 rounded text-xs bg-white border border-slate-300 hover:bg-slate-100"
-        >
-          ─ Line
-        </button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().setHorizontalRule().run()}
+            className="px-2 py-1 rounded text-xs bg-white border border-slate-300 hover:bg-slate-100"
+          >
+            ─ Line
+          </button>
 
-        <div className="w-px bg-slate-300" />
+          <div className="w-px bg-slate-300" />
 
-        <button
-          type="button"
-          onClick={() =>
-            editor.chain().focus().toggleHeading({ level: 1 }).run()
-          }
-          disabled={!editor.can().chain().focus().toggleHeading({ level: 1 }).run()}
-          className={`px-2 py-1 rounded text-xs font-bold ${
-            editor.isActive("heading", { level: 1 })
-              ? "bg-slate-900 text-white"
-              : "bg-white border border-slate-300 hover:bg-slate-100"
-          }`}
-        >
-          H1
-        </button>
-
-        <button
-          type="button"
-          onClick={() =>
-            editor.chain().focus().toggleHeading({ level: 2 }).run()
-          }
-          disabled={!editor.can().chain().focus().toggleHeading({ level: 2 }).run()}
-          className={`px-2 py-1 rounded text-xs font-bold ${
-            editor.isActive("heading", { level: 2 })
-              ? "bg-slate-900 text-white"
-              : "bg-white border border-slate-300 hover:bg-slate-100"
-          }`}
-        >
-          H2
-        </button>
-
-        <button
-          type="button"
-          onClick={() =>
-            editor.chain().focus().toggleHeading({ level: 3 }).run()
-          }
-          disabled={!editor.can().chain().focus().toggleHeading({ level: 3 }).run()}
-          className={`px-2 py-1 rounded text-xs font-bold ${
-            editor.isActive("heading", { level: 3 })
-              ? "bg-slate-900 text-white"
-              : "bg-white border border-slate-300 hover:bg-slate-100"
-          }`}
-        >
-          H3
-        </button>
-
-        <div className="w-px bg-slate-300" />
-
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          disabled={!editor.can().chain().focus().toggleBulletList().run()}
-          className={`px-2 py-1 rounded text-xs ${
-            editor.isActive("bulletList")
-              ? "bg-slate-900 text-white"
-              : "bg-white border border-slate-300 hover:bg-slate-100"
-          }`}
-        >
-          • List
-        </button>
-
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          disabled={!editor.can().chain().focus().toggleOrderedList().run()}
-          className={`px-2 py-1 rounded text-xs ${
-            editor.isActive("orderedList")
-              ? "bg-slate-900 text-white"
-              : "bg-white border border-slate-300 hover:bg-slate-100"
-          }`}
-        >
-          1. List
-        </button>
-
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
-          disabled={!editor.can().chain().focus().toggleBlockquote().run()}
-          className={`px-2 py-1 rounded text-xs ${
-            editor.isActive("blockquote")
-              ? "bg-slate-900 text-white"
-              : "bg-white border border-slate-300 hover:bg-slate-100"
-          }`}
-        >
-          "
-        </button>
-
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-          disabled={!editor.can().chain().focus().toggleCodeBlock().run()}
-          className={`px-2 py-1 rounded text-xs font-mono ${
-            editor.isActive("codeBlock")
-              ? "bg-slate-900 text-white"
-              : "bg-white border border-slate-300 hover:bg-slate-100"
-          }`}
-        >
-          Code
-        </button>
-
-        <div className="w-px bg-slate-300" />
-
-        <button
-          type="button"
-          onClick={() => {
-            const url = prompt("Enter URL:");
-            if (url) {
-              editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+          <button
+            type="button"
+            onClick={() =>
+              editor.chain().focus().toggleHeading({ level: 1 }).run()
             }
-          }}
-          className={`px-2 py-1 rounded text-xs ${
-            editor.isActive("link")
-              ? "bg-slate-900 text-white"
-              : "bg-white border border-slate-300 hover:bg-slate-100"
-          }`}
-        >
-          🔗 Link
-        </button>
+            disabled={!editor.can().chain().focus().toggleHeading({ level: 1 }).run()}
+            className={`px-2 py-1 rounded text-xs font-bold ${
+              editor.isActive("heading", { level: 1 })
+                ? "bg-slate-900 text-white"
+                : "bg-white border border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            H1
+          </button>
 
-        <div className="w-px bg-slate-300" />
+          <button
+            type="button"
+            onClick={() =>
+              editor.chain().focus().toggleHeading({ level: 2 }).run()
+            }
+            disabled={!editor.can().chain().focus().toggleHeading({ level: 2 }).run()}
+            className={`px-2 py-1 rounded text-xs font-bold ${
+              editor.isActive("heading", { level: 2 })
+                ? "bg-slate-900 text-white"
+                : "bg-white border border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            H2
+          </button>
 
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().clearNodes().run()}
-          className="px-2 py-1 rounded text-xs bg-white border border-slate-300 hover:bg-slate-100"
-        >
-          Clear
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() =>
+              editor.chain().focus().toggleHeading({ level: 3 }).run()
+            }
+            disabled={!editor.can().chain().focus().toggleHeading({ level: 3 }).run()}
+            className={`px-2 py-1 rounded text-xs font-bold ${
+              editor.isActive("heading", { level: 3 })
+                ? "bg-slate-900 text-white"
+                : "bg-white border border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            H3
+          </button>
+
+          <div className="w-px bg-slate-300" />
+
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+            disabled={!editor.can().chain().focus().toggleBulletList().run()}
+            className={`px-2 py-1 rounded text-xs ${
+              editor.isActive("bulletList")
+                ? "bg-slate-900 text-white"
+                : "bg-white border border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            • List
+          </button>
+
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            disabled={!editor.can().chain().focus().toggleOrderedList().run()}
+            className={`px-2 py-1 rounded text-xs ${
+              editor.isActive("orderedList")
+                ? "bg-slate-900 text-white"
+                : "bg-white border border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            1. List
+          </button>
+
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleBlockquote().run()}
+            disabled={!editor.can().chain().focus().toggleBlockquote().run()}
+            className={`px-2 py-1 rounded text-xs ${
+              editor.isActive("blockquote")
+                ? "bg-slate-900 text-white"
+                : "bg-white border border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            "
+          </button>
+
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+            disabled={!editor.can().chain().focus().toggleCodeBlock().run()}
+            className={`px-2 py-1 rounded text-xs font-mono ${
+              editor.isActive("codeBlock")
+                ? "bg-slate-900 text-white"
+                : "bg-white border border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            Code
+          </button>
+
+          <div className="w-px bg-slate-300" />
+
+          <button
+            type="button"
+            onClick={() => {
+              const url = prompt("Enter URL:");
+              if (url) {
+                editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+              }
+            }}
+            className={`px-2 py-1 rounded text-xs ${
+              editor.isActive("link")
+                ? "bg-slate-900 text-white"
+                : "bg-white border border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            🔗 Link
+          </button>
+
+          <div className="w-px bg-slate-300" />
+
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().clearNodes().run()}
+            className="px-2 py-1 rounded text-xs bg-white border border-slate-300 hover:bg-slate-100"
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
       {/* Editor */}
       <EditorContent
