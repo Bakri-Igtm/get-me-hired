@@ -326,16 +326,19 @@ export const createResumeWithFile = async (req, res) => {
     // First version is 1
     const versionNumber = 1;
 
-    // Insert version with file metadata
+    // Insert version with file metadata and content
     const [versionResult] = await conn.query(
       `
       INSERT INTO resume_versions
         (resume_id, version_number, content, file_name, file_path, file_mime, file_size)
-      VALUES (?, ?, NULL, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       `,
       [
         resumeId,
         versionNumber,
+        // If fileContent is empty, we might want to store NULL or empty string.
+        // But if we extracted text, we store it here.
+        fileContent || null,
         file.originalname,
         file.path, // stored by multer
         file.mimetype,

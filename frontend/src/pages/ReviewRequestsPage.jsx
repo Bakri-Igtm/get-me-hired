@@ -17,7 +17,7 @@ import {
   addReviewComment,
 } from "../api/reviewComments";
 import { fetchMembers } from "../api/directory";
-import { fetchMyResumeVersions, uploadResumeFile } from "../api/resumes";
+import { fetchMyResumeVersions, uploadResumeFile, fetchMyResumes } from "../api/resumes";
 import html2pdf from "html2pdf.js";
 
 function roleLabel(type) {
@@ -75,6 +75,9 @@ export default function ReviewRequestsPage() {
   const [reviewerSearch, setReviewerSearch] = useState("");
   const [selectedReviewerId, setSelectedReviewerId] = useState(null);
   const [newTrack, setNewTrack] = useState("");
+  const [myTracks, setMyTracks] = useState([]);
+  const [trackMode, setTrackMode] = useState("new"); // "existing" | "new"
+  const [selectedTrackId, setSelectedTrackId] = useState("");
   const [newNote, setNewNote] = useState("");
   const [newFile, setNewFile] = useState(null);
   const [formError, setFormError] = useState("");
@@ -326,6 +329,11 @@ export default function ReviewRequestsPage() {
     setAiRequested(true); // default: ask AI
     setResumeMode("select"); // default: select existing version
     setUploadedFileContent(null);
+    
+    // Reset track selection state
+    setTrackMode("new");
+    setSelectedTrackId("");
+    setMyTracks([]);
 
     // Load potential reviewers (directory)
     if (!reviewerOptions.length) {
@@ -340,15 +348,27 @@ export default function ReviewRequestsPage() {
       }
     }
 
-    // Load your resume versions
+    // Load your resume versions AND tracks
     try {
       setMyVersionsLoading(true);
-      const { data } = await fetchMyResumeVersions();
-      setMyVersions(data.versions || []);
-      // optionally set myResumeMeta if backend sends it
-      // setMyResumeMeta({ ... })
+      const [versionsResp, tracksResp] = await Promise.all([
+        fetchMyResumeVersions(),
+        fetchMyResumes()
+      ]);
+      
+      setMyVersions(versionsResp.data.versions || []);
+      
+      const tracks = tracksResp.data.resumes || [];
+      setMyTracks(tracks);
+      
+      if (tracks.length > 0) {
+        setTrackMode("existing");
+        setSelectedTrackId(tracks[0].resume_id);
+      } else {
+        setTrackMode("new");
+      }
     } catch (e) {
-      console.error("fetchMyResumeVersions error:", e);
+      console.error("fetchMyResumes/Versions error:", e);
     } finally {
       setMyVersionsLoading(false);
     }
@@ -371,8 +391,12 @@ export default function ReviewRequestsPage() {
         setFormError("Please upload and preview a resume file.");
         return;
       }
-      if (!newTrack.trim()) {
+      if (trackMode === "new" && !newTrack.trim()) {
         setFormError("Please enter a track/role focus for the new resume.");
+        return;
+      }
+      if (trackMode === "existing" && !selectedTrackId) {
+        setFormError("Please select an existing track.");
         return;
       }
     }
@@ -392,9 +416,15 @@ export default function ReviewRequestsPage() {
         console.log("Creating new resume from uploaded file...");
         // Upload file (or edited HTML content) as new resume
         const formData = new FormData();
-        formData.append("mode", "new");
-        formData.append("trackTitle", newTrack.trim());
-        formData.append("versionLabel", "Version 1");
+        
+        if (trackMode === "new") {
+          formData.append("mode", "new");
+          formData.append("trackTitle", newTrack.trim());
+          formData.append("versionLabel", "Version 1");
+        } else {
+          formData.append("mode", "existing");
+          formData.append("resumeId", selectedTrackId);
+        }
         // If the user edited the uploaded content, send that as a text file so
         // the backend will store the HTML string in the content column.
         if (uploadedFileContent) {
@@ -407,7 +437,9 @@ export default function ReviewRequestsPage() {
 
         const { data } = await uploadResumeFile(formData);
         // Get the version ID from response
-        if (data.resume && data.resume.versions && data.resume.versions[0]) {
+        if (data.resume_versions_id) {
+          versionIdToUse = data.resume_versions_id;
+        } else if (data.resume && data.resume.versions && data.resume.versions[0]) {
           versionIdToUse = data.resume.versions[0].resume_versions_id;
         } else {
           throw new Error("Failed to create resume");
@@ -685,7 +717,7 @@ export default function ReviewRequestsPage() {
       {/* New Request Modal */}
       {showNewRequestForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white border border-slate-200 rounded-xl shadow-lg max-w-lg w-full mx-4 p-4 space-y-4">
+          <div className="bg-white border border-slate-200 rounded-xl shadow-lg max-w-lg w-full mx-4 p-4 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-900">
                 Request a review
@@ -811,6 +843,75 @@ export default function ReviewRequestsPage() {
             {/* Upload new file */}
             {resumeMode === "upload" && (
               <div className="space-y-2">
+                {/* Track / Role Focus */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-slate-700">
+                    Target Role / Track <span className="text-red-500">*</span>
+                  </label>
+                  
+                  {myTracks.length > 0 ? (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex gap-2 text-[11px]">
+                        <label className="inline-flex items-center gap-1">
+                          <input
+                            type="radio"
+                            name="trackMode"
+                            value="existing"
+                            checked={trackMode === "existing"}
+                            onChange={() => setTrackMode("existing")}
+                          />
+                          <span>Add to existing track</span>
+                        </label>
+                        <label className="inline-flex items-center gap-1">
+                          <input
+                            type="radio"
+                            name="trackMode"
+                            value="new"
+                            checked={trackMode === "new"}
+                            onChange={() => setTrackMode("new")}
+                          />
+                          <span>Create new track</span>
+                        </label>
+                      </div>
+
+                      {trackMode === "existing" ? (
+                        <select
+                          className="w-full text-xs border border-slate-300 rounded px-2 py-1"
+                          value={selectedTrackId}
+                          onChange={(e) => setSelectedTrackId(Number(e.target.value))}
+                        >
+                          {myTracks.map((t) => (
+                            <option key={t.resume_id} value={t.resume_id}>
+                              {t.trackTitle}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          className="w-full text-xs border border-slate-300 rounded px-2 py-1"
+                          placeholder="e.g. Software Engineer, Product Manager"
+                          value={newTrack}
+                          onChange={(e) => setNewTrack(e.target.value)}
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-[10px] text-slate-500 mb-1">
+                        You don't have any resume tracks yet. Create one below.
+                      </p>
+                      <input
+                        type="text"
+                        className="w-full text-xs border border-slate-300 rounded px-2 py-1"
+                        placeholder="e.g. Software Engineer, Product Manager"
+                        value={newTrack}
+                        onChange={(e) => setNewTrack(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+
                 {/* File input */}
                 <div className="space-y-1">
                   <label className="text-[11px] font-medium text-slate-700">
@@ -1118,6 +1219,16 @@ function DetailView(props) {
     // If content doesn't have HTML tags, use simple replace
     if (!htmlContent.includes("<")) {
       return htmlContent.replace(originalText, replacementText);
+    }
+
+    // 0. If originalText contains HTML tags, try a direct replacement first.
+    // This handles cases where the AI extracted raw HTML (e.g. "<strong>Foo</strong>")
+    // and wants to replace the whole block including tags.
+    if (originalText.includes("<") && originalText.includes(">")) {
+      if (htmlContent.includes(originalText)) {
+        console.log("✓ Found exact HTML match, replacing directly");
+        return htmlContent.replace(originalText, "<mark>" + replacementText + "</mark>");
+      }
     }
 
     try {

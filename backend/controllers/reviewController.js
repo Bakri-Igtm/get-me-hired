@@ -50,7 +50,7 @@ export const createOrUpdateReview = async (req, res) => {
           AND (
             visibility = 'public'
             OR (
-              visibility = 'direct'
+              visibility = 'private'
               AND reviewer_id = ?
               AND status IN ('pending','accepted')
             )

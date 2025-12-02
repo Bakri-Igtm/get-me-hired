@@ -30,24 +30,47 @@ function PieChart({ data, colors }) {
     );
   }
 
-  let currentAngle = 0;
-  const segments = Object.entries(data).map(([label, value]) => {
-    const percentage = (value / total) * 100;
-    const angle = (value / total) * 360;
-    const color = colors[label] || "#cbd5e1";
-    const segment = `${color} ${currentAngle}deg ${currentAngle + angle}deg`;
-    currentAngle += angle;
-    return segment;
-  });
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setMounted(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
 
-  const gradient = `conic-gradient(${segments.join(", ")})`;
+  let currentAngle = 0;
+  const circleRadius = 8; 
+  const circumference = 2 * Math.PI * circleRadius;
 
   return (
     <div className="flex items-center gap-4">
-      <div 
-        className="w-24 h-24 rounded-full shrink-0 border-4 border-white shadow-sm"
-        style={{ background: gradient }}
-      />
+      <div className="relative w-24 h-24 shrink-0 rounded-full border-4 border-white shadow-sm bg-white">
+        <svg viewBox="0 0 32 32" className="w-full h-full transform -rotate-90">
+          {Object.entries(data).map(([label, value]) => {
+            const percentage = value / total;
+            const strokeLength = percentage * circumference;
+            const rotation = currentAngle;
+            currentAngle += percentage * 360;
+            const color = colors[label] || "#cbd5e1";
+
+            return (
+              <circle
+                key={label}
+                cx="16"
+                cy="16"
+                r={circleRadius}
+                fill="transparent"
+                stroke={color}
+                strokeWidth="16"
+                strokeDasharray={`${mounted ? strokeLength : 0} ${circumference}`}
+                style={{
+                  transition: "stroke-dasharray 1s cubic-bezier(0.4, 0, 0.2, 1)",
+                  transform: `rotate(${rotation}deg)`,
+                  transformOrigin: "center",
+                }}
+              />
+            );
+          })}
+        </svg>
+      </div>
       <div className="space-y-1">
         {Object.entries(data).map(([label, value]) => (
           <div key={label} className="flex items-center gap-2 text-xs">
