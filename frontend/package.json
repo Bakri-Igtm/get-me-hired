@@ -10,15 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tiptap/extension-highlight": "^3.11.1",
-    "@tiptap/react": "^3.11.0",
-    "@tiptap/starter-kit": "^3.11.0",
+    "@tinymce/tinymce-react": "^5",
     "axios": "^1.13.2",
     "html2pdf.js": "^0.12.1",
     "lucide-react": "^0.553.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "react-router-dom": "^7.9.5"
+    "react-router-dom": "^7.9.5",
+    "tinymce": "^7"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

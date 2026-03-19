@@ -1,76 +1,24 @@
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Link from "@tiptap/extension-link";
-import Underline from "@tiptap/extension-underline";
-import Highlight from "@tiptap/extension-highlight";
-import { useEffect, useImperativeHandle, forwardRef } from "react";
+import { useEffect, useImperativeHandle, forwardRef, useRef } from "react";
+import { Editor } from "@tinymce/tinymce-react";
 
 const ResumeEditor = forwardRef(function ResumeEditor({ content, onChange, editable = true }, ref) {
-  const editor = useEditor({
-    editable,
-    extensions: [
-      StarterKit,
-      Link.configure({
-        openOnClick: false,
-      }),
-      Underline,
-      Highlight.configure({
-        multicolor: false,
-      }),
-    ],
-    content: content || "<p></p>",
-    onUpdate: ({ editor }) => {
-      onChange(editor.getHTML());
-    },
-    editorProps: {
-      attributes: {
-        class:
-          "prose prose-sm max-w-none focus:outline-none text-[10pt] leading-relaxed min-h-[297mm] w-[210mm] bg-white shadow-sm p-[15mm] mx-auto",
-        style: "font-family: 'Arial', sans-serif;",
-      },
-    },
-  });
-
-  // Update editor content when prop changes
-  useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content || "<p></p>");
-    }
-  }, [content, editor]);
+  const editorRef = useRef(null);
 
   // Expose methods via ref
   useImperativeHandle(ref, () => ({
     highlightText: (text) => {
+      const editor = editorRef.current;
       if (!editor || !text) return;
       
       try {
-        // Search through the document for the text
-        const { doc } = editor.state;
         const searchText = text.trim();
-        let found = false;
-        
-        doc.descendants((node, pos) => {
-          if (node.isText && node.text.includes(searchText)) {
-            // Found the text node containing our search text
-            const index = node.text.indexOf(searchText);
-            if (index !== -1) {
-              const from = pos + index;
-              const to = from + searchText.length;
-              
-              // Use a transaction to set the selection and highlight
-              editor
-                .chain()
-                .focus()
-                .setTextSelection({ from, to })
-                .toggleHighlight()
-                .run();
-              
-              found = true;
-            }
-          }
-        });
+        const found = editor.plugins.searchreplace.find(searchText);
         
         if (found) {
+          // Highlight the found text using yellow background
+          editor.execCommand('mceInsertContent', false, 
+            `<span style="background-color: yellow;">${searchText}</span>`
+          );
           console.log("✅ Highlighted suggested text");
         } else {
           console.log("⚠️ Could not find text to highlight:", searchText.substring(0, 50));
@@ -80,242 +28,101 @@ const ResumeEditor = forwardRef(function ResumeEditor({ content, onChange, edita
       }
     },
     clearHighlights: () => {
+      const editor = editorRef.current;
       if (!editor) return;
+      
       try {
-        // Find all nodes with highlight mark and remove it
-        const { state, view } = editor;
-        const { doc } = state;
-        let tr = state.tr;
-        let updated = false;
-        
-        doc.descendants((node, pos) => {
-          if (node.marks.some(mark => mark.type.name === 'highlight')) {
-            const end = pos + node.nodeSize;
-            const hasMark = state.doc.rangeHasMark(pos, end, state.schema.marks.highlight);
-            
-            if (hasMark) {
-              tr.removeMark(pos, end, state.schema.marks.highlight);
-              updated = true;
-            }
-          }
-        });
-        
-        if (updated) {
-          view.dispatch(tr);
-          console.log("✅ Cleared highlights");
-        }
+        // Remove all yellow highlights
+        const content = editor.getContent();
+        const cleanedContent = content.replace(
+          /<span style="background-color: yellow;">([^<]*)<\/span>/gi,
+          '$1'
+        );
+        editor.setContent(cleanedContent);
+        console.log("✅ Cleared highlights");
       } catch (err) {
         console.error("Error clearing highlights:", err);
       }
     },
-    getEditor: () => editor,
+    getEditor: () => editorRef.current,
   }));
-
-  if (!editor) {
-    return <div>Loading editor...</div>;
-  }
 
   return (
     <div className="flex flex-col h-full border border-slate-300 rounded-md overflow-hidden bg-white">
-      {/* Toolbar */}
-      {editable && (
-        <div className="flex flex-wrap gap-1 bg-slate-50 border-b border-slate-300 p-2">
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().toggleBold().run()}
-            disabled={!editor.can().chain().focus().toggleBold().run()}
-            className={`px-2 py-1 rounded text-xs font-semibold ${
-              editor.isActive("bold")
-                ? "bg-slate-900 text-white"
-                : "bg-white border border-slate-300 hover:bg-slate-100"
-            }`}
-          >
-            B
-          </button>
-
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().toggleItalic().run()}
-            disabled={!editor.can().chain().focus().toggleItalic().run()}
-            className={`px-2 py-1 rounded text-xs italic ${
-              editor.isActive("italic")
-                ? "bg-slate-900 text-white"
-                : "bg-white border border-slate-300 hover:bg-slate-100"
-            }`}
-          >
-            I
-          </button>
-
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().toggleUnderline().run()}
-            disabled={!editor.can().chain().focus().toggleUnderline().run()}
-            className={`px-2 py-1 rounded text-xs underline ${
-              editor.isActive("underline")
-                ? "bg-slate-900 text-white"
-                : "bg-white border border-slate-300 hover:bg-slate-100"
-            }`}
-          >
-            U
-          </button>
-
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().toggleStrike().run()}
-            disabled={!editor.can().chain().focus().toggleStrike().run()}
-            className={`px-2 py-1 rounded text-xs line-through ${
-              editor.isActive("strike")
-                ? "bg-slate-900 text-white"
-                : "bg-white border border-slate-300 hover:bg-slate-100"
-            }`}
-          >
-            S
-          </button>
-
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().setHorizontalRule().run()}
-            className="px-2 py-1 rounded text-xs bg-white border border-slate-300 hover:bg-slate-100"
-          >
-            ─ Line
-          </button>
-
-          <div className="w-px bg-slate-300" />
-
-          <button
-            type="button"
-            onClick={() =>
-              editor.chain().focus().toggleHeading({ level: 1 }).run()
+      <Editor
+        apiKey={import.meta.env.VITE_TINYMCE_API_KEY}
+        onInit={(evt, editor) => editorRef.current = editor}
+        value={content || "<p></p>"}
+        onEditorChange={(newContent) => {
+          onChange(newContent);
+        }}
+        disabled={!editable}
+        init={{
+          height: 750,
+          menubar: false,
+          plugins: [
+            'advlist', 'autolink', 'lists', 'link', 'charmap', 'preview',
+            'searchreplace', 'visualblocks', 'code', 'fullscreen',
+            'insertdatetime', 'table', 'wordcount', 'hr', 'pagebreak'
+          ],
+          toolbar: editable
+            ? 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | ' +
+              'forecolor backcolor | alignleft aligncenter alignright alignjustify | ' +
+              'bullist numlist outdent indent | hr | link table | removeformat'
+            : false,
+          font_family_formats: 'Arial=arial,helvetica,sans-serif; ' +
+            'Calibri=calibri,sans-serif; ' +
+            'Times New Roman=times new roman,times,serif; ' +
+            'Georgia=georgia,serif; ' +
+            'Courier New=courier new,courier,monospace; ' +
+            'Verdana=verdana,sans-serif; ' +
+            'Tahoma=tahoma,sans-serif',
+          font_size_formats: '8pt 9pt 10pt 11pt 12pt 14pt 16pt 18pt 24pt 36pt',
+          content_style: `
+            body {
+              font-family: Arial, sans-serif;
+              font-size: 10pt;
+              line-height: 1.6;
+              padding: 15mm;
+              max-width: 210mm;
+              min-height: 297mm;
+              margin: 0 auto;
+              background: white;
             }
-            disabled={!editor.can().chain().focus().toggleHeading({ level: 1 }).run()}
-            className={`px-2 py-1 rounded text-xs font-bold ${
-              editor.isActive("heading", { level: 1 })
-                ? "bg-slate-900 text-white"
-                : "bg-white border border-slate-300 hover:bg-slate-100"
-            }`}
-          >
-            H1
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              editor.chain().focus().toggleHeading({ level: 2 }).run()
+            hr {
+              border: none;
+              border-top: 1px solid #333;
+              margin: 12px 0;
             }
-            disabled={!editor.can().chain().focus().toggleHeading({ level: 2 }).run()}
-            className={`px-2 py-1 rounded text-xs font-bold ${
-              editor.isActive("heading", { level: 2 })
-                ? "bg-slate-900 text-white"
-                : "bg-white border border-slate-300 hover:bg-slate-100"
-            }`}
-          >
-            H2
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              editor.chain().focus().toggleHeading({ level: 3 }).run()
+            h1 {
+              font-size: 18pt;
+              margin: 8px 0;
+              border-bottom: 2px solid #333;
+              padding-bottom: 4px;
             }
-            disabled={!editor.can().chain().focus().toggleHeading({ level: 3 }).run()}
-            className={`px-2 py-1 rounded text-xs font-bold ${
-              editor.isActive("heading", { level: 3 })
-                ? "bg-slate-900 text-white"
-                : "bg-white border border-slate-300 hover:bg-slate-100"
-            }`}
-          >
-            H3
-          </button>
-
-          <div className="w-px bg-slate-300" />
-
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().toggleBulletList().run()}
-            disabled={!editor.can().chain().focus().toggleBulletList().run()}
-            className={`px-2 py-1 rounded text-xs ${
-              editor.isActive("bulletList")
-                ? "bg-slate-900 text-white"
-                : "bg-white border border-slate-300 hover:bg-slate-100"
-            }`}
-          >
-            • List
-          </button>
-
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().toggleOrderedList().run()}
-            disabled={!editor.can().chain().focus().toggleOrderedList().run()}
-            className={`px-2 py-1 rounded text-xs ${
-              editor.isActive("orderedList")
-                ? "bg-slate-900 text-white"
-                : "bg-white border border-slate-300 hover:bg-slate-100"
-            }`}
-          >
-            1. List
-          </button>
-
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().toggleBlockquote().run()}
-            disabled={!editor.can().chain().focus().toggleBlockquote().run()}
-            className={`px-2 py-1 rounded text-xs ${
-              editor.isActive("blockquote")
-                ? "bg-slate-900 text-white"
-                : "bg-white border border-slate-300 hover:bg-slate-100"
-            }`}
-          >
-            "
-          </button>
-
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-            disabled={!editor.can().chain().focus().toggleCodeBlock().run()}
-            className={`px-2 py-1 rounded text-xs font-mono ${
-              editor.isActive("codeBlock")
-                ? "bg-slate-900 text-white"
-                : "bg-white border border-slate-300 hover:bg-slate-100"
-            }`}
-          >
-            Code
-          </button>
-
-          <div className="w-px bg-slate-300" />
-
-          <button
-            type="button"
-            onClick={() => {
-              const url = prompt("Enter URL:");
-              if (url) {
-                editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
-              }
-            }}
-            className={`px-2 py-1 rounded text-xs ${
-              editor.isActive("link")
-                ? "bg-slate-900 text-white"
-                : "bg-white border border-slate-300 hover:bg-slate-100"
-            }`}
-          >
-            🔗 Link
-          </button>
-
-          <div className="w-px bg-slate-300" />
-
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().clearNodes().run()}
-            className="px-2 py-1 rounded text-xs bg-white border border-slate-300 hover:bg-slate-100"
-          >
-            Clear
-          </button>
-        </div>
-      )}
-
-      {/* Editor */}
-      <EditorContent
-        editor={editor}
-        className="flex-1 overflow-y-auto p-3 [&_*]:cursor-text"
+            h2 {
+              font-size: 14pt;
+              margin: 8px 0;
+              border-bottom: 1px solid #666;
+              padding-bottom: 2px;
+            }
+            h3 {
+              font-size: 12pt;
+              margin: 6px 0;
+            }
+            table {
+              border-collapse: collapse;
+              width: 100%;
+            }
+            table td, table th {
+              border: 1px solid #ddd;
+              padding: 8px;
+            }
+          `,
+          branding: false,
+          statusbar: false,
+          readonly: !editable,
+        }}
       />
     </div>
   );

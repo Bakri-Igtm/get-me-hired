@@ -11,6 +11,7 @@ import {
   submitReview,
   createReviewRequest,
   respondToRequest,
+  fetchTemplates,
 } from "../api/reviewRequests";
 import {
   fetchReviewComments,
@@ -87,8 +88,12 @@ export default function ReviewRequestsPage() {
   const [uploadedFileContent, setUploadedFileContent] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
 
-  // ask AI feedback?
-  const [aiRequested, setAiRequested] = useState(true);
+  // AI option: 'none' | 'suggestions' | 'rewrite'
+  const [aiMode, setAiMode] = useState("suggestions");
+
+  // Template selection for AI rewrite
+  const [templates, setTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(null);
 
   // your resume versions
   const [myVersions, setMyVersions] = useState([]);
@@ -150,6 +155,19 @@ export default function ReviewRequestsPage() {
 
   useEffect(() => {
     loadIncoming();
+  }, []);
+
+  // Load available resume templates for AI rewrite picker
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await fetchTemplates();
+        setTemplates(data);
+        if (data.length > 0) setSelectedTemplateId(data[0].template_id);
+      } catch (err) {
+        console.error("Failed to load templates:", err);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -326,7 +344,7 @@ export default function ReviewRequestsPage() {
     setNewFile(null);
     setSelectedResumeVersionId(null);
     setFormError("");
-    setAiRequested(true); // default: ask AI
+    setAiMode("suggestions"); // default: ask AI suggestions
     setResumeMode("select"); // default: select existing version
     setUploadedFileContent(null);
     
@@ -452,7 +470,8 @@ export default function ReviewRequestsPage() {
         visibility, // 'public' or 'private'
         track: newTrack || null, // e.g. "SWE"
         requestNote: newNote || null,
-        aiRequested, // send to backend
+        aiMode, // 'none' | 'suggestions' | 'rewrite'
+        templateId: aiMode === "rewrite" ? selectedTemplateId : null,
       });
 
       alert("Review request sent!");
@@ -955,8 +974,8 @@ export default function ReviewRequestsPage() {
                     <p className="text-[11px] font-medium text-slate-700">
                       Preview (editable)
                     </p>
-                    <div className="max-h-48 overflow-y-auto border border-slate-300 rounded p-2 bg-white text-xs text-slate-700">
-                      <div className="h-40">
+                    <div className="overflow-y-auto border border-slate-300 rounded p-2 bg-white text-xs text-slate-700">
+                      <div className="min-h-[300px]">
                         <ResumeEditor
                           content={uploadedFileContent}
                           onChange={(html) => setUploadedFileContent(html)}
@@ -981,19 +1000,90 @@ export default function ReviewRequestsPage() {
               />
             </div>
 
-            {/* Ask AI to review */}
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                type="checkbox"
-                id="aiRequested"
-                checked={aiRequested}
-                onChange={(e) => setAiRequested(e.target.checked)}
-                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-              />
-              <label htmlFor="aiRequested" className="text-[11px] font-medium text-slate-700 select-none">
-                Ask AI to review this resume
-              </label>
+            {/* AI option: none / suggestions / rewrite */}
+            <div className="space-y-1 pt-1">
+              <p className="text-[11px] font-medium text-slate-700">
+                AI assistance
+              </p>
+              <div className="flex flex-col gap-1.5 text-[11px]">
+                <label className="inline-flex items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="aiMode"
+                    value="none"
+                    checked={aiMode === "none"}
+                    onChange={() => setAiMode("none")}
+                  />
+                  <span>None</span>
+                </label>
+                <label className="inline-flex items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="aiMode"
+                    value="suggestions"
+                    checked={aiMode === "suggestions"}
+                    onChange={() => setAiMode("suggestions")}
+                  />
+                  <span>AI Suggestions <span className="text-slate-400">(line-by-line feedback)</span></span>
+                </label>
+                <label className="inline-flex items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="aiMode"
+                    value="rewrite"
+                    checked={aiMode === "rewrite"}
+                    onChange={() => setAiMode("rewrite")}
+                  />
+                  <span>AI Rewrite <span className="text-slate-400">(full resume rewrite as PDF)</span></span>
+                </label>
+              </div>
             </div>
+
+            {/* Template picker — shown only when AI Rewrite is selected */}
+            {aiMode === "rewrite" && templates.length > 0 && (
+              <div className="space-y-2 pt-1">
+                <p className="text-[11px] font-medium text-slate-700">
+                  Choose a resume template
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {templates.map((tpl) => {
+                    const isSelected = selectedTemplateId === tpl.template_id;
+                    return (
+                      <button
+                        key={tpl.template_id}
+                        type="button"
+                        onClick={() => setSelectedTemplateId(tpl.template_id)}
+                        className={`text-left border rounded-lg p-3 transition-all ${
+                          isSelected
+                            ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-300"
+                            : "border-slate-200 bg-white hover:border-slate-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span
+                            className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${
+                              isSelected
+                                ? "border-indigo-500"
+                                : "border-slate-300"
+                            }`}
+                          >
+                            {isSelected && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                            )}
+                          </span>
+                          <span className="text-xs font-semibold text-slate-800">
+                            {tpl.preview_label || tpl.name}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-tight pl-5">
+                          {tpl.description}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Reviewer selection (private only) */}
             {visibility === "private" && (
@@ -1176,9 +1266,23 @@ function DetailView(props) {
     responding,
   } = props;
 
-  const { request, aiFeedback, reviews, canSeeAiFeedback } = detail;
+  const { request, reviews, canSeeAiFeedback } = detail;
   const canDropReview = detail.isReviewer;
   const isOwner = detail.isRequester;
+
+  // Local aiFeedback state (starts from detail, updated by polling)
+  const [aiFeedback, setAiFeedback] = useState(detail.aiFeedback);
+
+  // Sync when detail changes externally (e.g. user clicks a different request)
+  useEffect(() => {
+    setAiFeedback(detail.aiFeedback);
+  }, [detail.aiFeedback]);
+
+  // Blob URL for the rewrite PDF (to pass auth)
+  const [rewritePdfBlobUrl, setRewritePdfBlobUrl] = useState(null);
+
+  // Toggle between "rewrite" (AI PDF) and "original" in rewrite mode
+  const [rewriteView, setRewriteView] = useState("rewrite");
 
   // "Word doc" content
   const [editorContent, setEditorContent] = useState(
@@ -1193,6 +1297,55 @@ function DetailView(props) {
   useEffect(() => {
     setEditorContent(request.resumeContent || "");
   }, [request.resumeContent, request.request_id]);
+
+  // ─── Auto-polling for AI rewrite completion ────────────────────────
+  const aiModeVal = request.ai_mode || (request.ai_requested ? "suggestions" : "none");
+  const rewritePending = aiModeVal === "rewrite" && canSeeAiFeedback &&
+    (!aiFeedback || (!aiFeedback.rewrite_pdf_path && !aiFeedback.rewrite_latex));
+
+  useEffect(() => {
+    if (!rewritePending) return;
+
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const { data } = await fetchRequestDetail(request.request_id);
+        if (!cancelled && data.aiFeedback) {
+          setAiFeedback(data.aiFeedback);
+        }
+      } catch (err) {
+        console.error("Rewrite poll error:", err);
+      }
+    };
+
+    const interval = setInterval(poll, 5000); // every 5 seconds
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [rewritePending, request.request_id]);
+
+  // ─── Fetch rewrite PDF as blob for auth ────────────────────────────
+  useEffect(() => {
+    if (!aiFeedback?.rewrite_pdf_url) {
+      setRewritePdfBlobUrl(null);
+      return;
+    }
+    let revoked = false;
+    (async () => {
+      try {
+        const resp = await api.get(aiFeedback.rewrite_pdf_url, {
+          responseType: "blob",
+        });
+        if (revoked) return;
+        const url = URL.createObjectURL(resp.data);
+        setRewritePdfBlobUrl(url);
+      } catch (err) {
+        console.error("Failed to fetch rewrite PDF blob:", err);
+      }
+    })();
+    return () => {
+      revoked = true;
+      setRewritePdfBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
+    };
+  }, [aiFeedback?.rewrite_pdf_url]);
 
   // Side-panel suggestions from aiFeedback structured JSON
   const [localSuggestions, setLocalSuggestions] = useState([]);
@@ -1625,8 +1778,9 @@ function DetailView(props) {
     }
   };
 
-  // show AI panel only if request asked for AI + backend says user can see it
-  const showAiPanel = !!request.ai_requested && canSeeAiFeedback;
+  // Determine which AI view to show (aiModeVal already computed above for polling)
+  const showAiPanel = aiModeVal === "suggestions" && canSeeAiFeedback;
+  const showRewritePanel = aiModeVal === "rewrite" && canSeeAiFeedback;
 
   const handleExportPdf = () => {
     if (!editorContent) return;
@@ -1815,8 +1969,8 @@ function DetailView(props) {
                   </div>
                 )}
 
-                {/* Tiptap Editor */}
-                <div className="w-full flex-1 relative">
+                {/* TinyMCE Editor */}
+                <div className="w-full h-full">
                   <ResumeEditor
                     ref={resumeEditorRef}
                     content={editorContent}
@@ -2064,6 +2218,160 @@ function DetailView(props) {
             )}
           </aside>
         </div>
+      ) : showRewritePanel ? (
+        // AI Rewrite mode — single panel with toggle between rewrite & original
+        <div className="flex flex-col gap-2">
+          <div className="text-xs text-slate-500 flex items-center justify-between">
+            <span>AI Rewrite</span>
+            <div className="flex items-center gap-2">
+              {aiFeedback?.model && (
+                <span className="text-[10px] text-slate-400">
+                  Model: {aiFeedback.model}
+                </span>
+              )}
+              {isOwner ? (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+                  You can edit the original during review
+                </span>
+              ) : (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-100">
+                  Read-only for you
+                </span>
+              )}
+            </div>
+          </div>
+
+          {!aiFeedback ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-2">
+              <div className="inline-block animate-spin">
+                <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+              <p className="text-sm text-slate-500">Generating AI rewrite…</p>
+              <p className="text-[10px] text-slate-400">This may take 15–30 seconds.</p>
+            </div>
+          ) : (
+            <>
+              {/* Toggle tabs */}
+              <div className="flex rounded-lg border border-slate-200 overflow-hidden w-fit">
+                <button
+                  onClick={() => setRewriteView("rewrite")}
+                  className={`text-[11px] px-4 py-1.5 font-semibold transition ${
+                    rewriteView === "rewrite"
+                      ? "bg-slate-900 text-white"
+                      : "bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  AI Re-written Resume
+                </button>
+                <button
+                  onClick={() => setRewriteView("original")}
+                  className={`text-[11px] px-4 py-1.5 font-semibold transition ${
+                    rewriteView === "original"
+                      ? "bg-slate-900 text-white"
+                      : "bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  Original Resume
+                </button>
+              </div>
+
+              {/* Resume display area */}
+              {rewriteView === "rewrite" ? (
+                <div className="flex flex-col gap-2">
+                  {aiFeedback.rewrite_pdf_url ? (
+                    <div className="bg-white rounded-md border border-slate-200 h-[800px]">
+                      {rewritePdfBlobUrl ? (
+                        <iframe
+                          src={rewritePdfBlobUrl}
+                          className="w-full h-full rounded-md"
+                          title="AI Rewritten Resume PDF"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full">
+                          <p className="text-xs text-slate-400">Loading PDF…</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : aiFeedback.rewrite_latex ? (
+                    <div className="bg-amber-50 border border-amber-200 rounded-md p-4 text-xs text-amber-800">
+                      <p className="font-semibold mb-1">⚠ PDF compilation pending</p>
+                      <p>The LaTeX source was generated but PDF compilation hasn't completed yet.
+                         You can download the LaTeX source and compile it yourself.</p>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 border border-slate-200 rounded-md p-4 text-xs text-slate-500">
+                      <p>Rewrite is still being generated…</p>
+                    </div>
+                  )}
+
+                  {/* Action buttons for rewrite view */}
+                  <div className="flex justify-end gap-2">
+                    {aiFeedback.rewrite_pdf_url && rewritePdfBlobUrl && (
+                      <a
+                        href={rewritePdfBlobUrl}
+                        download={`rewrite_${request.request_id}.pdf`}
+                        className="text-[11px] px-3 py-1.5 rounded-full bg-red-600 text-white hover:bg-red-700 inline-block"
+                      >
+                        Download PDF
+                      </a>
+                    )}
+                    {aiFeedback.rewrite_latex && (
+                      <button
+                        onClick={() => {
+                          const blob = new Blob([aiFeedback.rewrite_latex], { type: "text/plain" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `rewrite_${request.request_id}.tex`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="text-[11px] px-3 py-1.5 rounded-full bg-slate-700 text-white hover:bg-slate-800"
+                      >
+                        Download LaTeX
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* Original resume view — same style as the regular resume panel */
+                <div className="flex flex-col gap-2">
+                  <div className="bg-slate-100 rounded-md p-3 flex justify-center">
+                    <div className="bg-slate-100 w-full max-w-full overflow-auto rounded-md relative h-[800px]">
+                      <div className="w-full h-full">
+                        <ResumeEditor
+                          content={editorContent}
+                          onChange={(newContent) => setEditorContent(newContent)}
+                          editable={isOwner}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {isOwner && (
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={handleExportPdf}
+                        className="text-[11px] px-3 py-1.5 rounded-full bg-red-600 text-white hover:bg-red-700"
+                      >
+                        Export to PDF
+                      </button>
+                      <button
+                        onClick={handleSaveAsNewVersion}
+                        className="text-[11px] px-3 py-1.5 rounded-full bg-slate-900 text-white hover:bg-slate-800"
+                      >
+                        Save as new resume version
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       ) : (
         // no AI panel (either not requested or user not allowed)
         <div className="flex flex-col gap-2">
@@ -2081,8 +2389,8 @@ function DetailView(props) {
           </div>
 
           <div className="bg-slate-100 rounded-md p-3 flex justify-center">
-            <div className="bg-slate-100 w-full max-w-full overflow-auto rounded-md relative flex-1 h-[800px]">
-              <div className="w-full flex-1 relative">
+            <div className="bg-slate-100 w-full max-w-full overflow-auto rounded-md relative h-[800px]">
+              <div className="w-full h-full">
                 <ResumeEditor
                   content={editorContent}
                   onChange={(newContent) => setEditorContent(newContent)}

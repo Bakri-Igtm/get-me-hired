@@ -1,6 +1,6 @@
 // controllers/reviewRequestController.js
 import pool from "../db.js";
-import { generateAiFeedbackAsync } from "./aiFeedbackController.js";
+import { generateAiFeedbackAsync, generateAiRewriteAsync } from "./aiFeedbackController.js";
 
 /**
  * POST /api/review-requests
@@ -15,7 +15,9 @@ export const createReviewRequest = async (req, res) => {
     visibility,   // 'public' | 'private' (from frontend)
     track,
     requestNote,
-    aiRequested,  // 🔹 NEW
+    aiRequested,  // legacy boolean (still accepted)
+    aiMode: rawAiMode, // 🔹 NEW: 'none' | 'suggestions' | 'rewrite'
+    templateId,   // 🔹 FK to resume_templates (used when aiMode='rewrite')
   } = req.body;
 
   const requesterId = req.user.userId;
@@ -45,8 +47,14 @@ export const createReviewRequest = async (req, res) => {
       .json({ message: "reviewerId is required for private requests" });
   }
 
-  // normalize aiRequested to 0/1
-  const aiFlag = aiRequested ? 1 : 0;
+  // 🔹 Determine AI mode — support both legacy boolean and new enum
+  let aiMode = "none"; // default
+  if (rawAiMode && ["none", "suggestions", "rewrite"].includes(rawAiMode)) {
+    aiMode = rawAiMode;
+  } else if (aiRequested) {
+    aiMode = "suggestions"; // backward compat
+  }
+  const aiFlag = aiMode !== "none" ? 1 : 0; // legacy column
 
   try {
     // Make sure version exists
@@ -72,8 +80,8 @@ export const createReviewRequest = async (req, res) => {
     const [result] = await pool.query(
       `
       INSERT INTO review_request
-        (resume_versions_id, requester_id, reviewer_id, visibility, track, request_note, ai_requested)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+        (resume_versions_id, requester_id, reviewer_id, visibility, track, request_note, ai_requested, ai_mode, template_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         resumeVersionsId,
@@ -82,17 +90,20 @@ export const createReviewRequest = async (req, res) => {
         vis,
         track || null,
         requestNote || null,
-        aiFlag,                     // 🔹 NEW
+        aiFlag,
+        aiMode,
+        aiMode === "rewrite" ? (templateId || 1) : null,
       ]
     );
 
-    // 🔹 TRIGGER AI FEEDBACK GENERATION ASYNCHRONOUSLY (non-blocking)
-    if (aiFlag) {
+    // 🔹 TRIGGER AI ASYNCHRONOUSLY based on mode
+    if (aiMode === "suggestions") {
       generateAiFeedbackAsync(resumeVersionsId).catch((err) => {
-        console.error(
-          `AI feedback generation failed for resume ${resumeVersionsId}:`,
-          err.message
-        );
+        console.error(`AI suggestions failed for resume ${resumeVersionsId}:`, err.message);
+      });
+    } else if (aiMode === "rewrite") {
+      generateAiRewriteAsync(resumeVersionsId, templateId || 1).catch((err) => {
+        console.error(`AI rewrite failed for resume ${resumeVersionsId}:`, err.message);
       });
     }
 
@@ -350,7 +361,8 @@ export const getReviewRequestDetail = async (req, res) => {
         rr.created_at,
         rr.visibility,
         rr.track,
-        rr.ai_requested,  -- 🔹 NEW
+        rr.ai_requested,
+        rr.ai_mode,
 
         req.user_fname  AS requesterFirstName,
         req.user_lname  AS requesterLastName,
@@ -398,7 +410,7 @@ export const getReviewRequestDetail = async (req, res) => {
 
     // 🔹 Only fetch AI feedback if it was requested
     let aiFeedback = null;
-    if (base.ai_requested) {
+    if (base.ai_requested || base.ai_mode !== "none") {
       const [aiRows] = await pool.query(
         `
         SELECT
@@ -406,6 +418,8 @@ export const getReviewRequestDetail = async (req, res) => {
           model,
           feedback_text,
           score,
+          rewrite_latex,
+          rewrite_pdf_path,
           created_at
         FROM ai_feedback
         WHERE resume_versions_id = ?
@@ -413,6 +427,11 @@ export const getReviewRequestDetail = async (req, res) => {
         [base.resume_versions_id]
       );
       aiFeedback = aiRows[0] || null;
+
+      // For rewrite mode, add a browser-friendly PDF URL
+      if (aiFeedback && aiFeedback.rewrite_pdf_path) {
+        aiFeedback.rewrite_pdf_url = `/api/ai-feedback/rewrite-pdf/${base.resume_versions_id}`;
+      }
     }
 
     // Human reviews unchanged...
@@ -458,7 +477,7 @@ export const getReviewRequestDetail = async (req, res) => {
 
     // 🔹 AI visibility: only requester (and optionally admin)
     const canSeeAiFeedback =
-      !!base.ai_requested && (isRequester || isAdmin);
+      (!!base.ai_requested || base.ai_mode !== "none") && (isRequester || isAdmin);
 
     return res.json({
       request: base,        // includes ai_requested

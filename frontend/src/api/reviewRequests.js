@@ -17,14 +17,15 @@ export const submitReview = ({ resumeVersionsId, rating, comment }) =>
     comment,
   });
 
-// create a review request – update to pass visibility + track too
+// create a review request – supports aiMode: 'none' | 'suggestions' | 'rewrite'
 export const createReviewRequest = ({
   resumeVersionsId,
   reviewerId,
   visibility,
   track,
   requestNote,
-  aiRequested,
+  aiMode,
+  templateId,
 }) =>
   api.post("/api/review-requests", {
     resumeVersionsId,
@@ -32,8 +33,12 @@ export const createReviewRequest = ({
     visibility,
     track,
     requestNote,
-    aiRequested
+    aiMode,
+    templateId,
   });
+
+// fetch available resume templates for AI rewrite
+export const fetchTemplates = () => api.get("/api/ai-feedback/templates");
 
 // accept / decline a request
 export const respondToRequest = (requestId, status) =>

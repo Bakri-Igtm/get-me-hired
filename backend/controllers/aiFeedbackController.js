@@ -354,6 +354,252 @@ export const generateAiFeedback = async (req, res) => {
   }
 };
 
+// ─── AI REWRITE ───────────────────────────────────────────────────────────────
+import fs from "fs";
+import path from "path";
+import { compileAndSave } from "../utils/latexCompiler.js";
+
+// ─── LIST RESUME TEMPLATES ───────────────────────────────────────────────────
+export const listTemplates = async (_req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT template_id, name, description, preview_label, tex_filename
+       FROM resume_templates
+       WHERE is_active = 1
+       ORDER BY sort_order`
+    );
+    return res.json(rows);
+  } catch (err) {
+    console.error("listTemplates error:", err);
+    return res.status(500).json({ message: "Error listing templates" });
+  }
+};
+
+// ─── HELPER: load preamble + commands-hint for a given template ─────────────
+async function loadTemplate(templateId) {
+  // 1. Look up template row
+  const [rows] = await pool.query(
+    `SELECT tex_filename, ai_commands_hint FROM resume_templates WHERE template_id = ?`,
+    [templateId]
+  );
+  if (rows.length === 0) throw new Error(`Template ${templateId} not found`);
+
+  const { tex_filename, ai_commands_hint } = rows[0];
+
+  // 2. Read the .tex file from disk
+  const texPath = path.join(process.cwd(), "templates", tex_filename);
+  const full = fs.readFileSync(texPath, "utf-8");
+  const idx = full.indexOf("\\begin{document}");
+  const preamble = idx >= 0 ? full.substring(0, idx) : full;
+
+  return { preamble, commandsHint: ai_commands_hint || "" };
+}
+
+// Build the rewrite system prompt dynamically per-template
+function buildRewritePrompt(commandsHint) {
+  return `
+You are an expert resume writer. You will receive the text content of a candidate's resume.
+Your job:
+1. Rewrite and improve the resume content (better action verbs, quantified achievements, concise language, ATS-friendly).
+2. Output the resume body as LaTeX code that uses ONLY the custom commands listed below.
+3. Do NOT output the preamble, \\documentclass, \\usepackage, or any command definitions — only the body between \\begin{document} and \\end{document} (inclusive).
+4. Do NOT invent jobs, degrees, skills, or accomplishments that are not present or clearly implied.
+5. Preserve the candidate's career story.
+6. The ENTIRE resume MUST fit on exactly ONE page. Be concise — trim low-impact bullets, merge similar items, and keep descriptions tight. Never let content overflow to a second page.
+7. Use the \\resumeHeading command for the name and contact header, following the EXACT format shown in the HEADER line of the commands list below. Include only contact info present in the original resume — do NOT invent any.
+
+Available custom commands (already defined in the preamble):
+  ${commandsHint}
+
+CRITICAL LATEX ESCAPING RULES:
+- The % character is a COMMENT in LaTeX — ALWAYS write \\% when you mean a percent sign (e.g. 80\\%, 15\\%).
+- The & character must be \\& outside of tabular environments.
+- The # character must be \\# in text.
+- The \\resumeSubheading command requires EXACTLY 4 arguments: {Title}{Date}{Subtitle}{Date}. If an argument is empty, use {}.
+
+ONE-PAGE RULES:
+- Aim for 3–5 bullet points per role, each 1–2 lines max.
+- If the resume has many roles/projects, keep only the most impactful bullets.
+- Use \\vspace{-Xpt} between sections to tighten spacing if needed.
+- Prefer shorter, punchier phrasing over verbose descriptions.
+
+Output ONLY valid LaTeX starting with \\begin{document} and ending with \\end{document}.
+Do NOT wrap in markdown code fences. No explanation text — pure LaTeX only.
+`;
+}
+
+/**
+ * Generate an AI-rewritten resume as LaTeX → compile to PDF, store both.
+ * Called asynchronously after review-request creation.
+ * @param {number} resumeVersionsId
+ * @param {number|null} templateId — FK to resume_templates; defaults to 1 (Classic)
+ */
+export async function generateAiRewriteAsync(resumeVersionsId, templateId) {
+  try {
+    // 0. Default to Classic (id=1) if no template specified
+    const tplId = templateId || 1;
+
+    // Load template preamble + commands hint
+    const { preamble, commandsHint } = await loadTemplate(tplId);
+    const systemPrompt = buildRewritePrompt(commandsHint);
+
+    // 1. Fetch resume text
+    const [rows] = await pool.query(
+      `SELECT rv.resume_versions_id, rv.content, r.user_id AS owner_id
+       FROM resume_versions rv
+       JOIN resume r ON rv.resume_id = r.resume_id
+       WHERE rv.resume_versions_id = ?`,
+      [resumeVersionsId]
+    );
+    if (rows.length === 0) throw new Error("Resume version not found");
+
+    const resumeText = rows[0].content || "";
+    if (!resumeText.trim()) throw new Error("Resume version has no content to rewrite.");
+
+    // Strip HTML tags so the LLM gets clean text
+    const plainText = resumeText.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+
+    const chosenModel = "gpt-4o-mini";
+
+    // 2. Call OpenAI
+    const completion = await openai.chat.completions.create({
+      model: chosenModel,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Here is the resume text to rewrite:\n\n${plainText}` },
+      ],
+    });
+
+    let latexBody = completion.choices[0]?.message?.content || "";
+    if (!latexBody.trim()) throw new Error("AI returned empty LaTeX.");
+
+    // Clean markdown fences if AI added them anyway
+    latexBody = latexBody.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
+
+    // Sanitize common AI LaTeX mistakes:
+    // 1. Escape bare % that aren't already escaped (\%) — % is a comment in LaTeX
+    latexBody = latexBody.replace(/(?<!\\)%/g, "\\%");
+    // 2. Escape bare # not already escaped
+    latexBody = latexBody.replace(/(?<!\\)#(?!\d)/g, "\\#");
+    // 3. Escape bare & not already escaped (except inside tabular environments)
+    // Skip this one — & is used legitimately in tabular* and section titles like \&
+    // 4. Escape bare ~ not already escaped (rare, but can cause issues)
+    // 5. Fix \resumeSubheading with only 3 args: {A}{B}{C} → {A}{B}{C}{}
+    latexBody = latexBody.replace(
+      /\\resumeSubheading\{([^}]*)\}\{([^}]*)\}\{([^}]*)\}(?!\s*\{)/g,
+      "\\resumeSubheading{$1}{$2}{$3}{}"
+    );
+
+    // 3. Combine preamble + body
+    const fullLatex = preamble + "\n" + latexBody;
+
+    // 4. Compile to PDF
+    const REWRITE_DIR = path.join(process.cwd(), "uploads", "rewrites");
+    if (!fs.existsSync(REWRITE_DIR)) fs.mkdirSync(REWRITE_DIR, { recursive: true });
+    const pdfFilename = `rewrite_${resumeVersionsId}_${Date.now()}.pdf`;
+    const pdfPath = path.join(REWRITE_DIR, pdfFilename);
+
+    try {
+      await compileAndSave(fullLatex, pdfPath);
+      console.log(`✓ Compiled rewrite PDF for resume ${resumeVersionsId}`);
+    } catch (compileErr) {
+      console.error(`✗ LaTeX compilation failed for resume ${resumeVersionsId}:`, compileErr.message);
+      // Still save the LaTeX so the user can download/fix it
+    }
+
+    const relativePdfPath = fs.existsSync(pdfPath) ? `uploads/rewrites/${pdfFilename}` : null;
+
+    // 5. Upsert into ai_feedback
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      const [existing] = await conn.query(
+        `SELECT ai_feedback_id FROM ai_feedback WHERE resume_versions_id = ?`,
+        [resumeVersionsId]
+      );
+
+      if (existing.length > 0) {
+        await conn.query(
+          `UPDATE ai_feedback
+           SET model = ?, rewrite_latex = ?, rewrite_pdf_path = ?, created_at = NOW()
+           WHERE ai_feedback_id = ?`,
+          [chosenModel, fullLatex, relativePdfPath, existing[0].ai_feedback_id]
+        );
+      } else {
+        await conn.query(
+          `INSERT INTO ai_feedback (resume_versions_id, model, rewrite_latex, rewrite_pdf_path)
+           VALUES (?, ?, ?, ?)`,
+          [resumeVersionsId, chosenModel, fullLatex, relativePdfPath]
+        );
+      }
+
+      await conn.commit();
+      console.log(`✓ AI rewrite saved for resume ${resumeVersionsId}`);
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    console.error(`✗ AI rewrite generation failed for resume ${resumeVersionsId}:`, err.message);
+    throw err;
+  }
+}
+
+/**
+ * GET /api/ai-feedback/rewrite-pdf/:resumeVersionsId
+ * Serve the compiled rewrite PDF to the browser.
+ */
+export const serveRewritePdf = async (req, res) => {
+  const { resumeVersionsId } = req.params;
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT rewrite_pdf_path FROM ai_feedback WHERE resume_versions_id = ?`,
+      [resumeVersionsId]
+    );
+
+    if (rows.length === 0 || !rows[0].rewrite_pdf_path) {
+      return res.status(404).json({ message: "No rewrite PDF found" });
+    }
+
+    const absPath = path.join(process.cwd(), rows[0].rewrite_pdf_path);
+    if (!fs.existsSync(absPath)) {
+      return res.status(404).json({ message: "Rewrite PDF file missing from disk" });
+    }
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", "inline");
+    fs.createReadStream(absPath).pipe(res);
+  } catch (err) {
+    console.error("serveRewritePdf error:", err);
+    return res.status(500).json({ message: "Error serving rewrite PDF" });
+  }
+};
+
+/**
+ * GET /api/ai-feedback/rewrite-latex/:resumeVersionsId
+ * Return the raw LaTeX source so the user can copy/download it.
+ */
+export const getRewriteLatex = async (req, res) => {
+  const { resumeVersionsId } = req.params;
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT rewrite_latex FROM ai_feedback WHERE resume_versions_id = ?`,
+      [resumeVersionsId]
+    );
+
+    if (rows.length === 0 || !rows[0].rewrite_latex) {
+      return res.status(404).json({ message: "No rewrite LaTeX found" });
+    }
+
+    return res.json({ latex: rows[0].rewrite_latex });
+  } catch (err) {
+    console.error("getRewriteLatex error:", err);
+    return res.status(500).json({ message: "Error fetching rewrite LaTeX" });
+  }
+};
+
 // 3) Fetch feedback for a version
 export const getAiFeedbackForVersion = async (req, res) => {
   const { resumeVersionsId } = req.params;

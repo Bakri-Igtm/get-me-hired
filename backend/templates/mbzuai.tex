@@ -1,0 +1,54 @@
+%-------------------------
+% Resume in Latex — MBZUAI Academic Template
+% Clean academic layout with blue accent headings
+%------------------------
+
+\documentclass[11pt,a4paper]{article}
+
+%----------------------------------------------------------------------------------------
+%	PACKAGES
+%----------------------------------------------------------------------------------------
+\usepackage[left=0.8in,top=0.8in,right=0.8in,bottom=0.8in]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[default]{sourcesanspro}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{parskip}
+\usepackage[hidelinks]{hyperref}
+
+%----------------------------------------------------------------------------------------
+%	COLORS & STYLES
+%----------------------------------------------------------------------------------------
+\definecolor{titleblue}{HTML}{00199e}
+\definecolor{subtitleblue}{HTML}{2ec1e0}
+\definecolor{darktext}{HTML}{222222}
+
+\color{darktext}
+\linespread{0.9}
+\setlength{\parskip}{0.1em}
+
+\titleformat{\section}{\Large\bfseries\color{titleblue}}{}{0em}{}
+\titlespacing*{\section}{0pt}{0.7em}{0.15em}
+
+\newcommand{\blueitem}[1]{\textcolor{subtitleblue}{\textbf{#1}}}
+
+\setlist[itemize]{label=\textbullet, leftmargin=*, noitemsep, topsep=0pt, parsep=0pt}
+
+% Left-aligned header with blue name
+\newcommand{\resumeHeading}[2]{%
+  {\Huge \textbf{\textcolor{titleblue}{#1}}} \vspace{0.2em}\par
+  \small #2\par
+  \vspace{0.4em}
+}
+
+%-------------------------------------------
+%%%%%%  RESUME STARTS HERE  %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+
+%%% PLACEHOLDER: The AI will generate everything below this line
+%%% using the custom commands defined above.
+
+\end{document}

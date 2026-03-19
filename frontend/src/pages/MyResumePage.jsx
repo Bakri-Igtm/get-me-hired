@@ -80,7 +80,12 @@ export default function MyResumesPage() {
         setExpandedResumeId((prev) => prev ?? first.resume_id);
 
         if (first.versions && first.versions.length > 0) {
-          setSelectedVersion((prev) => prev ?? first.versions[0]);
+          setSelectedVersion((prev) => {
+            if (prev) return prev;
+            // Also populate the editor content for the first version
+            setEditingContent(first.versions[0].content || "");
+            return first.versions[0];
+          });
         }
       } else {
         setSelectedResumeId(null);
