@@ -157,6 +157,7 @@ export const getIncomingRequests = async (req, res) => {
       FROM review_request rr
       JOIN users rq ON rq.user_id = rr.requester_id
       LEFT JOIN profile pr ON pr.user_id = rq.user_id
+      JOIN users me ON me.user_id = ?
 
       WHERE
         -- 1) private requests explicitly addressed to me
@@ -164,12 +165,12 @@ export const getIncomingRequests = async (req, res) => {
 
         OR
 
-        -- 2) public requests from other users (feed)
-        (rr.visibility = 'public' AND rr.requester_id <> ?)
+        -- 2) public requests from other users, created AFTER my account
+        (rr.visibility = 'public' AND rr.requester_id <> ? AND rr.created_at >= me.created_at)
 
       ORDER BY rr.created_at DESC
       `,
-      [userId, userId]
+      [userId, userId, userId]
     );
 
     return res.json({ requests: rows });

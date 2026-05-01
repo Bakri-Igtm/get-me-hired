@@ -411,15 +411,43 @@ Your job:
 Available custom commands (already defined in the preamble):
   ${commandsHint}
 
+CRITICAL LATEX STRUCTURE RULES:
+- Every section containing subheadings (\\resumeSubheading, \\resumeProjectHeading, etc.) MUST be wrapped in \\resumeSubHeadingListStart / \\resumeSubHeadingListEnd.
+- Bullet items (\\resumeItem) under any heading MUST be wrapped in \\resumeItemListStart / \\resumeItemListEnd. NEVER place \\resumeItem outside of an itemize list environment.
+- For \\resumeProjectHeading, ALWAYS bold the project name: \\resumeProjectHeading{\\textbf{Project Name} $|$ \\emph{Tech Stack Used}}{Date or Link}
+- Correct section pattern:
+  \\section{Section Name}
+  \\resumeSubHeadingListStart
+    \\resumeSubheading{Title}{Date}{Subtitle}{Location}
+    \\resumeItemListStart
+      \\resumeItem{Bullet text here}
+    \\resumeItemListEnd
+  \\resumeSubHeadingListEnd
+- Correct project pattern:
+  \\section{Projects}
+  \\resumeSubHeadingListStart
+    \\resumeProjectHeading{\\textbf{Name} $|$ \\emph{Tech}}{Date}
+    \\resumeItemListStart
+      \\resumeItem{Bullet text here}
+    \\resumeItemListEnd
+  \\resumeSubHeadingListEnd
+
 CRITICAL LATEX ESCAPING RULES:
 - The % character is a COMMENT in LaTeX — ALWAYS write \\% when you mean a percent sign (e.g. 80\\%, 15\\%).
 - The & character must be \\& outside of tabular environments.
 - The # character must be \\# in text.
 - The \\resumeSubheading command requires EXACTLY 4 arguments: {Title}{Date}{Subtitle}{Date}. If an argument is empty, use {}.
 
+EXPERIENCE BULLET RULES:
+- Every role in the Experience section MUST have at least 3 bullet points.
+- At least 1 bullet per role MUST follow the XYZ format: "Accomplished [X] by implementing [Y], resulting in [Z]" — where X is what you did, Y is how you did it, and Z is a measurable outcome (numbers, percentages, dollar amounts, time saved, etc.).
+- The remaining bullets should use strong action verbs and be impact-focused.
+- Each bullet should be 1–2 lines max. Be concise but specific.
+- If quantified results aren't explicitly stated in the original, you may reasonably infer a realistic metric only when strongly implied (e.g. "managed a team" → "Led a team of 5+").
+
 ONE-PAGE RULES:
-- Aim for 3–5 bullet points per role, each 1–2 lines max.
-- If the resume has many roles/projects, keep only the most impactful bullets.
+- Keep 3–5 bullet points per role, each 1–2 lines max.
+- If the resume has many roles/projects, keep only the most impactful bullets and trim projects/skills sections to stay within one page.
 - Use \\vspace{-Xpt} between sections to tighten spacing if needed.
 - Prefer shorter, punchier phrasing over verbose descriptions.
 

@@ -68,6 +68,9 @@ export default function ReviewRequestsPage() {
   // accept / decline
   const [responding, setResponding] = useState(false);
 
+  // toast notification
+  const [toast, setToast] = useState(null); // { message, type: 'success' | 'error' }
+
   // New Request UI state
   const [showNewRequestForm, setShowNewRequestForm] = useState(false);
   const [visibility, setVisibility] = useState("private"); // "private" | "public"
@@ -474,8 +477,9 @@ export default function ReviewRequestsPage() {
         templateId: aiMode === "rewrite" ? selectedTemplateId : null,
       });
 
-      alert("Review request sent!");
       setShowNewRequestForm(false);
+      setToast({ message: "Review request sent!", type: "success" });
+      setTimeout(() => setToast(null), 4000);
     } catch (e) {
       console.error("createReviewRequest error:", e);
       setFormError(
@@ -522,6 +526,36 @@ export default function ReviewRequestsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Toast notification */}
+      {toast && (
+        <div
+          className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-lg shadow-lg text-sm font-medium transition-all animate-[fadeIn_0.2s_ease-out] ${
+            toast.type === "success"
+              ? "bg-emerald-600 text-white"
+              : "bg-red-600 text-white"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {toast.type === "success" ? (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+            {toast.message}
+            <button
+              onClick={() => setToast(null)}
+              className="ml-2 opacity-70 hover:opacity-100"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">

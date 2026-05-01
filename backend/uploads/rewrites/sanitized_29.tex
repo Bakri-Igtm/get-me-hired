@@ -1,0 +1,185 @@
+\%-------------------------
+\% Resume in Latex
+\% Author : Jake Gutierrez
+\% Based off of: https://github.com/sb2nov/resume
+\% License : MIT
+\%------------------------
+
+\documentclass[letterpaper,11pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\input{glyphtounicode}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\% Adjust margins
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-.5in}
+\addtolength{\textheight}{1.0in}
+
+\urlstyle{same}
+
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+\% Sections formatting
+\titleformat{\section}{
+  \vspace{-4pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+\% Ensure that generate pdf is machine readable/ATS parsable
+\pdfgentounicode=1
+
+\%-------------------------
+\% Custom commands
+\newcommand{\resumeItem}[1]{
+  \item\small{
+    {#1 \vspace{-2pt}}
+  }
+}
+
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeSubSubheading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \textit{\small#1} & \textit{\small #2} \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeProjectHeading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \small#1 & #2 \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
+
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
+\% Centered header: name on top, contact details below
+\% Usage: \resumeHeading{Full Name}{detail1 $|$ detail2 $|$ detail3 ...}
+\newcommand{\resumeHeading}[2]{\%
+  \begin{center}
+    {\Huge \scshape #1} \\ \vspace{1pt}
+    \small #2
+  \end{center}
+}
+
+\%-------------------------------------------
+\%\%\%\%\%\%  RESUME STARTS HERE  \%\%\%\%\%\%\%\%\%\%\%\%\%\%\%\%\%\%\%\%\%\%\%\%\%\%\%\%
+
+
+\begin{document}
+
+\resumeHeading{BRIAN O. DIYAOLU}{(662) 867-3529 $|$ \href{mailto:briandiyaolu09@gmail.com}{briandiyaolu09@gmail.com} $|$ LinkedIn $|$ Portfolio $|$ GitHub $|$ Jackson, MS}
+
+\section{SUMMARY OF KEY QUALIFICATIONS}
+\resumeItemListStart
+    \resumeItem{Epic Certified Applications Analyst with expertise in configuring enterprise scheduling systems, decision trees, and workflow automation in healthcare.}
+    \resumeItem{Advanced data professional proficient in SQL, Python, R, and BI tools, converting raw data into strategic insights via dashboards and predictive modeling.}
+    \resumeItem{MBA and MS in Information Systems graduate adept at aligning technical solutions with business strategy to deliver scalable and outcome-driven results.}
+\resumeItemListEnd
+
+\section{EDUCATION}
+\resumeSubHeadingListStart
+    \resumeSubheading{Mississippi State University}{Starkville, MS}{M.S. in Information Systems, GPA: 3.82}{May 2025}
+    \resumeSubheading{Mississippi State University}{Starkville, MS}{M.B.A., GPA: 3.82}{May 2025}
+    \resumeSubheading{Mississippi Valley State University}{Itta Bena, MS}{B.S. in Computer Science, Magna Cum Laude, GPA: 3.58}{May 2023}
+\resumeSubHeadingListEnd
+
+\section{PROFESSIONAL EXPERIENCE}
+\resumeSubHeadingListStart
+    \resumeSubheading{Epic Applications Analyst}{July 2025 – Present}{University of Mississippi Medical Center}{Jackson, MS}
+    \resumeItemListStart
+        \resumeItem{Configured Epic Cadence components for 700+ providers, optimizing enterprise scheduling operations.}
+        \resumeItem{Developed automated rule logic for workqueues, reducing manual tasks by [x\%] and enhancing workflow efficiency.}
+        \resumeItem{Supported the Infusion Template Generator project, resolving over [x+] user issues during deployment.}
+        \resumeItem{Executed Data Courier migrations with [x\%] accuracy, ensuring consistent deployment across environments.}
+    \resumeItemListEnd
+
+    \resumeSubheading{Graduate Assistant, EIS Web Development}{August 2023 – May 2025}{Mississippi State University}{Starkville, MS}
+    \resumeItemListStart
+        \resumeItem{Collaborated with a team to deliver web projects using agile methodology, contributing to [specific deliverable].}
+        \resumeItem{Created a centralized web interface for 50+ projects, ensuring scalability for future enhancements.}
+        \resumeItem{Optimized SQL queries to enhance data accuracy by 80\%, minimizing inconsistencies.}
+        \resumeItem{Improved code quality and reduced production issues by 85\% through detailed testing and documentation.}
+    \resumeItemListEnd
+
+    \resumeSubheading{Consulting Analyst (MBA Capstone Project)}{January 2025 – May 2025}{Saturn Materials}{Starkville, MS}
+    \resumeItemListStart
+        \resumeItem{Developed a brand improvement strategy projecting [x\%] increase in visibility.}
+        \resumeItem{Led data mining using Python and Google APIs, improving data quality for analysis.}
+        \resumeItem{Presented actionable recommendations to enhance strategic decision-making to Saturn leadership.}
+    \resumeItemListEnd
+\resumeSubHeadingListEnd
+
+\section{RESEARCH EXPERIENCE}
+\resumeSubHeadingListStart
+    \resumeSubheading{Business Forecasting Analytics Research (APEX Forecast)}{Month Year – Month Year}{}{}
+    \resumeItemListStart
+        \resumeItem{Designed a forecasting platform with regression models achieving 80\% prediction accuracy for financial data.}
+        \resumeItem{Presented a research poster at the ADMI conference, receiving an award for innovation and projected impact.}
+    \resumeItemListEnd
+\resumeSubHeadingListEnd
+
+\section{PROJECTS}
+\resumeSubHeadingListStart
+    \resumeSubheading{MBA Case Competition}{2025}{}{}
+    \resumeItemListStart
+        \resumeItem{Researched EV market trends for Nissan, developing a strategic roadmap under tight deadlines.}
+    \resumeItemListEnd
+
+    \resumeSubheading{Orange Telecom Case Study}{View Project}{}{}
+    \resumeItemListStart
+        \resumeItem{Identified key churn drivers and developed a 94\% accurate logistic regression model to predict churn, proposing strategies to improve retention by 15\%.}
+    \resumeItemListEnd
+
+    \resumeSubheading{Car Sales Analytics}{View Project}{}{}
+    \resumeItemListStart
+        \resumeItem{Analyzed a dataset of 500,000 vehicles, uncovering insights that informed marketing strategies.}
+    \resumeItemListEnd
+\resumeSubHeadingListEnd
+
+\section{SKILLS \& CERTIFICATIONS}
+\resumeItemListStart
+    \resumeItem{Languages: Python, SQL, R, HTML, CSS}
+    \resumeItem{Tools: Tableau, Power BI, Git, Wix Studio, Microsoft Office}
+    \resumeItem{Certifications: Epic Cadence, Epic Decision Tree Badge, Epic Prelude, Epic Data Courier Badge}
+\resumeItemListEnd
+
+\section{ACTIVITIES \& LEADERSHIP EXPERIENCE}
+\resumeItemListStart
+    \resumeItem{Honors Scholar | Google Developer Club | Vice President, NSBE, MVSU Chapter}
+\resumeItemListEnd
+
+\end{document}

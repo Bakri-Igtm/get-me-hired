@@ -1,0 +1,101 @@
+﻿%-------------------------
+\n% Resume in Latex ? Classic Template
+\n% Author : Jake Gutierrez
+\n% Based off of: https://github.com/sb2nov/resume
+\n% License : MIT
+\n%------------------------
+\n
+\n\\documentclass[letterpaper,11pt]{article}
+\n
+\n\\usepackage{latexsym}
+\n\\usepackage[empty]{fullpage}
+\n\\usepackage{titlesec}
+\n\\usepackage{marvosym}
+\n\\usepackage[usenames,dvipsnames]{color}
+\n\\usepackage{verbatim}
+\n\\usepackage{enumitem}
+\n\\usepackage[hidelinks]{hyperref}
+\n\\usepackage{fancyhdr}
+\n\\usepackage[english]{babel}
+\n\\usepackage{tabularx}
+\n\\input{glyphtounicode}
+\n
+\n\\pagestyle{fancy}
+\n\\fancyhf{}
+\n\\fancyfoot{}
+\n\\renewcommand{\\headrulewidth}{0pt}
+\n\\renewcommand{\\footrulewidth}{0pt}
+\n
+\n% Adjust margins
+\n\\addtolength{\\oddsidemargin}{-0.5in}
+\n\\addtolength{\\evensidemargin}{-0.5in}
+\n\\addtolength{\\textwidth}{1in}
+\n\\addtolength{\\topmargin}{-.5in}
+\n\\addtolength{\\textheight}{1.0in}
+\n
+\n\\urlstyle{same}
+\n
+\n\\raggedbottom
+\n\\raggedright
+\n\\setlength{\\tabcolsep}{0in}
+\n
+\n% Sections formatting
+\n\\titleformat{\\section}{
+\n  \\vspace{-4pt}\\scshape\\raggedright\\large
+\n}{}{0em}{}[\\color{black}\\titlerule \\vspace{-5pt}]
+\n
+\n% Ensure that generate pdf is machine readable/ATS parsable
+\n\\pdfgentounicode=1
+\n
+\n%-------------------------
+\n% Custom commands
+\n\\newcommand{\\resumeItem}[1]{
+\n  \\item\\small{
+\n    {#1 \\vspace{-2pt}}
+\n  }
+\n}
+\n
+\n\\newcommand{\\resumeSubheading}[4]{
+\n  \\vspace{-2pt}\\item
+\n    \\begin{tabular*}{0.97\\textwidth}[t]{l@{\\extracolsep{\\fill}}r}
+\n      \\textbf{#1} & #2 \\\\
+\n      \\textit{\\small#3} & \\textit{\\small #4} \\\\
+\n    \\end{tabular*}\\vspace{-7pt}
+\n}
+\n
+\n\\newcommand{\\resumeSubSubheading}[2]{
+\n    \\item
+\n    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}
+\n      \\textit{\\small#1} & \\textit{\\small #2} \\\\
+\n    \\end{tabular*}\\vspace{-7pt}
+\n}
+\n
+\n\\newcommand{\\resumeProjectHeading}[2]{
+\n    \\item
+\n    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}
+\n      \\small#1 & #2 \\\\
+\n    \\end{tabular*}\\vspace{-7pt}
+\n}
+\n
+\n\\newcommand{\\resumeSubItem}[1]{\\resumeItem{#1}\\vspace{-4pt}}
+\n
+\n\\renewcommand\\labelitemii{$\\vcenter{\\hbox{\\tiny$\\bullet$}}$}
+\n
+\n\\newcommand{\\resumeSubHeadingListStart}{\\begin{itemize}[leftmargin=0.15in, label={}]}
+\n\\newcommand{\\resumeSubHeadingListEnd}{\\end{itemize}}
+\n\\newcommand{\\resumeItemListStart}{\\begin{itemize}}
+\n\\newcommand{\\resumeItemListEnd}{\\end{itemize}\\vspace{-5pt}}
+\n
+\n% Centered header: name on top, contact details below
+\n% Usage: \\resumeHeading{Full Name}{detail1 $|$ detail2 $|$ detail3 ...}
+\n\\newcommand{\\resumeHeading}[2]{%
+\n  \\begin{center}
+\n    {\\Huge \\scshape #1} \\\\ \\vspace{1pt}
+\n    \\small #2
+\n  \\end{center}
+\n}
+\n
+\n%-------------------------------------------
+\n%%%%%%  RESUME STARTS HERE  %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\n
+\n\n\\begin{document}\n\\resumeHeading{BAKRI DIYAOLU}{662-897-9095 $|$ \\href{mailto:bakridiyaolu@gmail.com}{bakridiyaolu@gmail.com} $|$ \\href{https://www.linkedin.com/in/bakri-diyaolu/}{LinkedIn} $|$ \\href{https://github.com/Bakri-Igtm}{GitHub} $|$ Itta Bena, MS}\n\n\\section{EDUCATION}\n\\resumeSubheading{Mississippi Valley State University}{May 2027}{Bachelor of Science in Computer Science, Bachelor of Arts in Mathematics}{}\n\\resumeItem{GPA: 4.0/4.0, Presidential Scholar, Honors List, FinishLine Scholarship Recipient}\n\n\\section{SKILLS \\& CERTIFICATIONS}\n\\resumeItemListStart\n\\resumeItem{Languages: Python, C++, HTML, CSS, JavaScript}\n\\resumeItem{Tools: Node.JS, React.JS, Next.JS, Firebase, Material UI, SQLite3, Vercel, Git, Tailwind CSS, Pandas, Pygame, Tkinter, Streamlit, Stripe, Clerk, RAG, Pinecone, Vector, Embedding}\n\\resumeItem{Certifications: Sololearn Introduction to Python, New Horizons Python Programming}\n\\resumeItemListEnd\n\n\\section{PROJECTS}\n\\resumeProjectHeading{AI Chess Bot}{GitHub}\n\\resumeItem{Developed a versatile Pygame chess engine, optimizing performance to process 2 moves/second.}\n\\resumeItem{Implemented NegaMax with Alpha Beta Pruning, enhancing strategy and reducing decision time by 75\\%.}\n\\resumeItem{Executed rigorous tests, improving calculation speed by 15\\% and accuracy by 10\\%.}\n\n\\resumeProjectHeading{Quick Flip}{GitHub}\n\\resumeItem{Engineered a flashcard generation tool using Next.js and OpenAI, enabling user-customized flashcards.}\n\\resumeItem{Elevated UI/UX with Material-UI, boosting user engagement by 40\\% and mobile retention by 65\\%.}\n\\resumeItem{Launched on Vercel, achieving over 50 users and seamless GitHub integration for updates.}\n\n\\resumeProjectHeading{ZiZi - IntHome?s Customer Support}{GitHub}\n\\resumeItem{Created an AI-powered chatbot with OpenAI, reducing response time by 30\\% and handling 60 queries/minute.}\n\\resumeItem{Implemented NLP to improve query understanding, significantly enhancing user satisfaction.}\n\\resumeItem{Optimized deployment on Vercel, ensuring response times under 100ms and improving operational efficiency by 50\\%.}\n\n\\resumeProjectHeading{Smart Meal Generator}{GitHub}\n\\resumeItem{Developed a personalized meal suggestion tool using Streamlit and a dataset of 200,000 recipes.}\n\\resumeItem{Leveraged Pandas for accurate nutritional and dietary analyses, enhancing recipe recommendations.}\n\\resumeItem{Crafted a responsive UI with CSS, increasing user engagement by 30\\% and reducing meal planning time.}\n\n\\section{EXPERIENCE}\n\\resumeSubheading{HeadStarter AI - Software Engineering Fellow}{July 2024 ? September 2024}{Remote}{}\n\\resumeItem{Collaborated in a prestigious fellowship to build impactful AI solutions while enhancing technical skills.}\n\\resumeItem{Led development of scalable applications with React, Next.JS, and OpenAI, aiming for 1,000 active users.}\n\n\\resumeSubheading{PwC - Non-Profit Strategy \\& Consulting Extern}{May 2024 ? July 2024}{Remote}{}\n\\resumeItem{Conducted research to identify 100+ potential funders for NYC Outward Bound Schools, increasing grant probability by 60\\%.}\n\\resumeItem{Developed strategic reports that fostered 3 new partnerships, enhancing total funding potential by 10\\%.}\n\n\\section{LEADERSHIP \\& AFFILIATIONS}\n\\resumeItem{Teaching Assistant of Calculus and College Algebra, Mathematics, Computer, and Information Science (M.C.I.S)}\n\\resumeItem{Treasurer, African Students Union}\n\\resumeItem{Community Member, Representative Face of M.C.I.S. 2024/2025 Series}\n\\resumeItem{CodePath Fellow, ColorStack Community Member}\n\\end{document}
